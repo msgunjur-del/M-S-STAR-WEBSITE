@@ -137,6 +137,7 @@ export default function DocumentPrintingPage() {
       // 5-second safety timer
       const timeoutPromise = new Promise<string>((_, reject) => {
         setTimeout(() => {
+          uploadTask.cancel();
           reject(new Error("Upload timeout"));
         }, 5000);
       });
@@ -149,7 +150,7 @@ export default function DocumentPrintingPage() {
               setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, progress, status: 'uploading' } : f));
             },
             (error) => {
-              console.error("Upload task error:", error);
+              // Suppress error log as we handle it gracefully with a fallback
               reject(error);
             },
             async () => {
