@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() { return request.auth != null; }
+    function isAdmin() { 
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "shankarboss3@gmail.com") ||
+        (request.auth.token.email == "admin@msstar.com")
+      ); 
+    }
+    
+    // Secret key bypass for "Normal Login"
+    function isSecretAuthorized(data) {
+      return data != null && 'adminKey' in data && data.adminKey == "Ammu@6231";
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isAdmin() || isSecretAuthorized(request.resource.data);
+      allow update: if isAdmin() || isSecretAuthorized(request.resource.data);
+      allow delete: if isAdmin() || isSecretAuthorized(resource.data);
+    }
+    match /orders/{orderId} {
+      allow read: if true; // Allowed for "Normal Login" access
+      allow create: if true;
+      allow update: if isAdmin() || isSecretAuthorized(request.resource.data);
+      allow delete: if isAdmin() || isSecretAuthorized(resource.data);
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create: if isAdmin() || isSecretAuthorized(request.resource.data);
+      allow update: if isAdmin() || isSecretAuthorized(request.resource.data);
+      allow delete: if isAdmin() || isSecretAuthorized(resource.data);
+    }
+  }
+}

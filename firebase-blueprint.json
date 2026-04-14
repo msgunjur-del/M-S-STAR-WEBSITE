@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A product offered by M S Star",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string", "enum": ["PVC CARDS", "PHOTOS", "DOCUMENTS"] },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["title", "price", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "deliveryAddress": { "type": "string" },
+        "deliveryMethod": { "type": "string", "enum": ["Home Delivery", "Store Pickup"] },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Processing", "Printing", "Ready", "Shipped", "Delivered", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "files": { "type": "array" },
+        "processedFiles": { "type": "array" },
+        "trackingNumber": { "type": "string" },
+        "instructions": { "type": "string" },
+        "couponCode": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["Pending", "Paid", "Failed"] },
+        "paymentId": { "type": "string" }
+      },
+      "required": ["customerName", "customerEmail", "items", "totalPrice", "status", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings and pricing",
+      "type": "object",
+      "properties": {
+        "pricePerPrintBW": { "type": "number" },
+        "pricePerPrintColor": { "type": "number" },
+        "spiralBindingCost": { "type": "number" },
+        "stapledBindingCost": { "type": "number" },
+        "courierCharges": { "type": "number" },
+        "pvcBasePrice": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of all products"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of all customer orders"
+    },
+    "/settings/global": {
+      "schema": "Settings",
+      "description": "Global settings document"
+    }
+  }
+}
