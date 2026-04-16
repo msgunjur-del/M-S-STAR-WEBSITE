@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, arrayRemove, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   User, ShoppingBag, Settings, LogOut, 
   ChevronRight, Package, Calendar, CreditCard,
-  Mail, Phone, MapPin, Camera
+  Mail, Phone, MapPin, Camera, Truck, Heart,
+  ArrowRight, Trash2
 } from 'lucide-react';
 
 export default function UserDashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
+  const [wishlistProducts, setWishlistProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'settings' | 'wishlist'>('orders');
   const navigate = useNavigate();
 
   // Profile Edit State
@@ -29,6 +31,7 @@ export default function UserDashboardPage() {
         setUser(currentUser);
         await fetchUserProfile(currentUser.uid);
         await fetchUserOrders(currentUser.uid);
+        await fetchWishlistProducts(currentUser.uid);
       } else {
         navigate('/login');
       }
@@ -63,15 +66,64 @@ export default function UserDashboardPage() {
     }
   };
 
+  const fetchWishlistProducts = async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const wishlistIds = userDoc.data().wishlist || [];
+        if (wishlistIds.length === 0) {
+          setWishlistProducts([]);
+          return;
+        }
+
+        const products: any[] = [];
+        for (const pid of wishlistIds) {
+          const pDoc = await getDoc(doc(db, 'products', pid));
+          if (pDoc.exists()) {
+            products.push({ id: pDoc.id, ...pDoc.data() });
+          } else {
+            // Check fallbacks if not in DB (optional, but good for consistency)
+            const fallbacks: any = {
+              'pvc-1': { title: 'Aadhar PVC Card Printing', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1633265486064-086b219458ce?w=800&q=80' },
+              'pvc-2': { title: 'PAN Card PVC Printing', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80' },
+              'pvc-3': { title: 'Voter ID PVC Card', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80' },
+              'pvc-4': { title: 'Custom ID Card', price: 149, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=80' },
+              'photo-1': { title: 'Passport Size Photo (Set of 8)', price: 40, category: 'PHOTOS', imageUrl: '/images/sample-girl.png' },
+              'photo-2': { title: '4x6 Photo Print', price: 15, category: 'PHOTOS', imageUrl: '/images/sample-boy.png' }
+            };
+            if (fallbacks[pid]) {
+              products.push({ id: pid, ...fallbacks[pid] });
+            }
+          }
+        }
+        setWishlistProducts(products);
+      }
+    } catch (error) {
+      console.error("Error fetching wishlist products:", error);
+    }
+  };
+
+  const removeFromWishlist = async (productId: string) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        wishlist: arrayRemove(productId)
+      }, { merge: true });
+      setWishlistProducts(prev => prev.filter(p => p.id !== productId));
+    } catch (error) {
+      console.error("Error removing from wishlist:", error);
+    }
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      await setDoc(doc(db, 'users', user.uid), {
         displayName: editName,
         phone: editPhone,
         address: editAddress
-      });
+      }, { merge: true });
       if (auth.currentUser) {
         await updateProfile(auth.currentUser, { displayName: editName });
       }
@@ -136,23 +188,33 @@ export default function UserDashboardPage() {
         <div className="lg:col-span-1 space-y-2">
           <button 
             onClick={() => setActiveTab('orders')}
-            className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all ${activeTab === 'orders' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'orders' ? 'bg-accent-blue text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
           >
             <div className="flex items-center gap-3">
-              <ShoppingBag size={20} />
+              <ShoppingBag size={18} />
               My Orders
             </div>
-            <ChevronRight size={18} className={activeTab === 'orders' ? 'opacity-100' : 'opacity-30'} />
+            <ChevronRight size={16} className={activeTab === 'orders' ? 'opacity-100' : 'opacity-30'} />
+          </button>
+          <button 
+            onClick={() => setActiveTab('wishlist')}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'wishlist' ? 'bg-accent-blue text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
+          >
+            <div className="flex items-center gap-3">
+              <Heart size={18} />
+              Wishlist
+            </div>
+            <ChevronRight size={16} className={activeTab === 'wishlist' ? 'opacity-100' : 'opacity-30'} />
           </button>
           <button 
             onClick={() => setActiveTab('profile')}
-            className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all ${activeTab === 'profile' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'profile' ? 'bg-accent-blue text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
           >
             <div className="flex items-center gap-3">
-              <User size={20} />
+              <User size={18} />
               Profile Details
             </div>
-            <ChevronRight size={18} className={activeTab === 'profile' ? 'opacity-100' : 'opacity-30'} />
+            <ChevronRight size={16} className={activeTab === 'profile' ? 'opacity-100' : 'opacity-30'} />
           </button>
         </div>
 
@@ -178,15 +240,34 @@ export default function UserDashboardPage() {
                               {order.status || 'Processing'}
                             </span>
                           </div>
-                          <h3 className="text-xl font-bold text-slate-900">₹{order.totalPrice}</h3>
-                          <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
-                            <div className="flex items-center gap-1.5">
-                              <Calendar size={14} />
-                              {order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleDateString() : 'Recent'}
+                          <div className="flex flex-col gap-1">
+                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Price</p>
+                            <h3 className="text-2xl font-black text-ink">₹{order.totalPrice}</h3>
+                          </div>
+                          <div className="flex flex-wrap gap-6 pt-2">
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                <Calendar size={10} /> Order Date
+                              </p>
+                              <p className="text-sm font-bold text-slate-700">
+                                {order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}
+                              </p>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <Package size={14} />
-                              {order.items?.length || 0} Items
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                <Package size={10} /> Items
+                              </p>
+                              <p className="text-sm font-bold text-slate-700">
+                                {order.items?.length || 0} Products
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                <Truck size={10} /> Shipping
+                              </p>
+                              <p className="text-sm font-bold text-slate-700">
+                                {order.shippingMethod || 'Standard'}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -208,6 +289,54 @@ export default function UserDashboardPage() {
                   <p className="text-slate-500 mb-8 max-w-xs mx-auto">Looks like you haven't placed any orders with us yet.</p>
                   <Link to="/" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
                     Start Shopping
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'wishlist' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-900 font-headline">My Wishlist</h2>
+              
+              {wishlistProducts.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {wishlistProducts.map(product => (
+                    <div key={product.id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex gap-4 group">
+                      <div className="w-24 h-24 bg-slate-50 rounded-2xl overflow-hidden shrink-0">
+                        <img src={product.imageUrl} alt={product.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between py-1">
+                        <div>
+                          <p className="text-[10px] font-black text-accent-blue uppercase tracking-widest mb-1">{product.category}</p>
+                          <h3 className="font-bold text-slate-900 line-clamp-1">{product.title}</h3>
+                          <p className="text-lg font-black text-ink">₹{product.price}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Link to={`/product/${product.id}`} className="flex-1 bg-slate-900 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-center hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+                            View <ArrowRight size={12} />
+                          </Link>
+                          <button 
+                            onClick={() => removeFromWishlist(product.id)}
+                            className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
+                            title="Remove from Wishlist"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white p-16 rounded-[2.5rem] text-center border border-slate-100">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Heart size={40} className="text-slate-300" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">Wishlist is empty</h3>
+                  <p className="text-slate-500 mb-8 max-w-xs mx-auto">Save your favorite products to view them later.</p>
+                  <Link to="/" className="inline-block bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
+                    Explore Products
                   </Link>
                 </div>
               )}

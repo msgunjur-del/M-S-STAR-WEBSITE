@@ -1,15 +1,59 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBasket, Clock, Package, Truck, CheckCircle2 } from 'lucide-react';
+import { Search, ShoppingBasket, Clock, Package, Truck, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function TrackOrderPage() {
   const [orderId, setOrderId] = useState('');
-  const [status, setStatus] = useState<null | 'searching' | 'found'>(null);
+  const [status, setStatus] = useState<null | 'searching' | 'found' | 'error'>(null);
+  const [orderData, setOrderData] = useState<any>(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleTrack = (e: React.FormEvent) => {
+  const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orderId) return;
+    
     setStatus('searching');
-    setTimeout(() => setStatus('found'), 1500);
+    setErrorMessage('');
+    
+    try {
+      // Clean order ID (remove # if present)
+      const cleanId = orderId.trim().replace('#', '');
+      const orderRef = doc(db, 'orders', cleanId);
+      const orderSnap = await getDoc(orderRef);
+
+      if (orderSnap.exists()) {
+        setOrderData({ id: orderSnap.id, ...orderSnap.data() });
+        setStatus('found');
+      } else {
+        setStatus('error');
+        setErrorMessage('Order not found. Please check your Order ID and try again.');
+      }
+    } catch (error) {
+      console.error("Error tracking order:", error);
+      setStatus('error');
+      setErrorMessage('An error occurred while fetching your order. Please try again later.');
+    }
+  };
+
+  const getStatusStep = (orderStatus: string) => {
+    const s = orderStatus?.toLowerCase() || 'pending';
+    if (s === 'delivered') return 4;
+    if (s === 'shipped') return 3;
+    if (['printing', 'ready', 'processing'].includes(s)) return 2;
+    return 1; // Pending
+  };
+
+  const currentStep = orderData ? getStatusStep(orderData.status) : 0;
+
+  const getTrackingUrl = (courier: string, trackingNumber: string) => {
+    const c = courier?.toLowerCase() || 'delhivery';
+    if (c === 'bluedart') return `https://www.bluedart.com/tracking?trackid=${trackingNumber}`;
+    if (c === 'ecom express') return `https://ecomexpress.in/tracking/?tracking_id=${trackingNumber}`;
+    if (c === 'xpressbees') return `https://www.xpressbees.com/track?shipment_id=${trackingNumber}`;
+    if (c === 'shadowfax') return `https://www.shadowfax.in/track?orderId=${trackingNumber}`;
+    if (c === 'india post') return `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`;
+    return `https://www.delhivery.com/track/package/${trackingNumber}`;
   };
 
   return (
@@ -55,53 +99,129 @@ export default function TrackOrderPage() {
           </div>
         )}
 
-        {status === 'found' && (
+        {status === 'error' && (
+          <div className="mt-8 p-6 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4 text-red-700 animate-in fade-in slide-in-from-top-2">
+            <AlertCircle size={24} />
+            <p className="font-bold">{errorMessage}</p>
+          </div>
+        )}
+
+        {status === 'found' && orderData && (
           <div className="mt-12 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
                 <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Status</p>
-                <p className="text-blue-900 font-black">In Transit</p>
+                <p className="text-blue-900 font-black">{orderData.status || 'Pending'}</p>
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Order ID</p>
-                <p className="text-slate-900 font-black">{orderId}</p>
+                <p className="text-slate-900 font-black">#{orderData.id}</p>
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Delivery</p>
-                <p className="text-slate-900 font-black">Today, 6 PM</p>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Date</p>
+                <p className="text-slate-900 font-black">
+                  {orderData.createdAt?.toDate ? orderData.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                </p>
               </div>
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Items</p>
-                <p className="text-slate-900 font-black">3 Files</p>
+                <p className="text-slate-900 font-black">{orderData.items?.length || 0} Products</p>
               </div>
             </div>
 
-            <div className="relative">
-              <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -translate-y-1/2"></div>
-              <div className="relative flex justify-between items-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-200">
-                    <CheckCircle2 size={20} />
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">Ordered</p>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-200">
-                    <Package size={20} />
-                  </div>
-                  <p className="text-xs font-bold text-slate-900">Packed</p>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-14 h-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-200 scale-110 ring-4 ring-blue-50">
+            {orderData.trackingNumber && (
+              <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
                     <Truck size={24} />
                   </div>
-                  <p className="text-xs font-black text-blue-600">Shipping</p>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center">
-                    <CheckCircle2 size={20} />
+                  <div>
+                    <p className="text-xs font-black text-indigo-400 uppercase tracking-widest">Tracking Number ({orderData.courier || 'Delhivery'})</p>
+                    <p className="text-xl font-black text-indigo-900 tracking-tight">{orderData.trackingNumber}</p>
                   </div>
-                  <p className="text-xs font-bold text-slate-400">Delivered</p>
+                </div>
+                <a 
+                  href={getTrackingUrl(orderData.courier, orderData.trackingNumber)} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="bg-white text-indigo-600 px-6 py-3 rounded-xl font-bold text-sm border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 shadow-sm"
+                >
+                  Track on {orderData.courier || 'Courier'} Site
+                  <ExternalLink size={16} />
+                </a>
+              </div>
+            )}
+
+            <div className="relative pt-4 pb-8">
+              <div className="absolute top-[44px] left-0 w-full h-1 bg-slate-100"></div>
+              <div 
+                className="absolute top-[44px] left-0 h-1 bg-green-500 transition-all duration-1000"
+                style={{ width: `${(Math.max(0, currentStep - 1) / 3) * 100}%` }}
+              ></div>
+              
+              <div className="relative flex justify-between items-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    currentStep >= 1 ? 'bg-green-500 text-white shadow-lg shadow-green-200' : 'bg-slate-100 text-slate-300'
+                  }`}>
+                    {currentStep > 1 ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+                  </div>
+                  <p className={`text-xs font-black uppercase tracking-widest ${currentStep >= 1 ? 'text-slate-900' : 'text-slate-400'}`}>Ordered</p>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    currentStep >= 2 ? 'bg-green-500 text-white shadow-lg shadow-green-200' : 'bg-slate-100 text-slate-300'
+                  }`}>
+                    {currentStep > 2 ? <CheckCircle2 size={24} /> : <Package size={24} />}
+                  </div>
+                  <p className={`text-xs font-black uppercase tracking-widest ${currentStep >= 2 ? 'text-slate-900' : 'text-slate-400'}`}>Processing</p>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    currentStep >= 3 ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-300'
+                  }`}>
+                    {currentStep > 3 ? <CheckCircle2 size={24} /> : <Truck size={24} />}
+                  </div>
+                  <p className={`text-xs font-black uppercase tracking-widest ${currentStep >= 3 ? 'text-blue-600' : 'text-slate-400'}`}>Shipping</p>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    currentStep >= 4 ? 'bg-green-500 text-white shadow-lg shadow-green-200' : 'bg-slate-100 text-slate-300'
+                  }`}>
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <p className={`text-xs font-black uppercase tracking-widest ${currentStep >= 4 ? 'text-slate-900' : 'text-slate-400'}`}>Delivered</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+              <h3 className="text-xl font-black font-headline mb-6">Order Summary</h3>
+              <div className="space-y-4">
+                {orderData.items?.map((item: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center py-3 border-b border-slate-200 last:border-0">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden">
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={20} className="text-slate-300" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">{item.title}</p>
+                        <p className="text-xs text-slate-500">Qty: {item.quantity || 1}</p>
+                      </div>
+                    </div>
+                    <p className="font-black text-slate-900">₹{item.price * (item.quantity || 1)}</p>
+                  </div>
+                ))}
+                <div className="pt-4 flex justify-between items-center">
+                  <p className="text-slate-500 font-bold">Total Amount</p>
+                  <p className="text-2xl font-black text-blue-600">₹{orderData.totalPrice}</p>
                 </div>
               </div>
             </div>

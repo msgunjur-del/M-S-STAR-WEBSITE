@@ -12,7 +12,8 @@ import {
   Clock, Zap, ArrowRight, ShoppingBag, Settings, Lock, MessageCircle
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
 import { CartProvider } from './context/CartContext';
 import HomePage from './pages/HomePage';
 import DocumentPrintingPage from './pages/DocumentPrintingPage';
@@ -40,13 +41,39 @@ import OrderSuccessPage from './pages/OrderSuccessPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import NotFoundPage from './pages/NotFoundPage';
 import SecurityBadgeSection from './components/SecurityBadgeSection';
 import SlideOutCart from './components/SlideOutCart';
 
 function Layout({ children, user }: { children: React.ReactNode, user: any }) {
   const { cart, setIsCartOpen } = useCart();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
+  const [adminEmail, setAdminEmail] = React.useState('shankarboss3@gmail.com');
+
+  React.useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settingsSnap = await getDoc(doc(db, 'settings', 'global'));
+        if (settingsSnap.exists() && settingsSnap.data().adminEmail) {
+          setAdminEmail(settingsSnap.data().adminEmail);
+        }
+      } catch (error) {
+        console.error("Error fetching admin email:", error);
+      }
+    };
+    fetchSettings();
+  }, []);
   
+  const [isScrolled, setIsScrolled] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-surface font-body text-on-surface antialiased flex flex-col">
       <SlideOutCart />
@@ -57,25 +84,31 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
           Important: Read our disclaimer before proceeding
         </Link>
       </div>
-      <nav className="fixed top-7 w-full z-50 px-4 md:px-8">
-        <div className="max-w-7xl mx-auto glass rounded-3xl shadow-[0_8px_32px_0_rgba(15,23,42,0.08)] flex justify-between items-center px-6 py-3">
+      <nav className={`fixed left-0 right-0 z-50 px-4 md:px-8 transition-all duration-300 ${isScrolled ? 'top-0 py-2' : 'top-7 py-0'}`}>
+        <div className={`max-w-7xl mx-auto glass rounded-3xl shadow-[0_8px_32px_0_rgba(15,23,42,0.08)] flex justify-between items-center px-6 transition-all duration-300 ${isScrolled ? 'py-2.5' : 'py-3'}`}>
           <Link to="/" className="text-2xl font-black text-accent-blue font-headline tracking-tighter flex items-center gap-2">
             <div className="w-8 h-8 bg-accent-blue rounded-xl flex items-center justify-center text-white rotate-12">
               <ShieldCheck size={20} />
             </div>
-            <span>MS STAR</span>
+            <span>M S STAR XEROX</span>
           </Link>
           
           {/* Desktop Menu */}
-          <div className="hidden lg:flex items-center gap-10 font-headline font-bold text-slate-500 text-sm tracking-tight">
+          <div className="hidden lg:flex items-center gap-8 font-headline font-bold text-slate-500 text-sm tracking-tight">
             <Link to="/" className="hover:text-accent-blue transition-colors">Home</Link>
             <Link to="/document-printing" className="hover:text-accent-blue transition-colors">Printing</Link>
             <Link to="/pvc-cards" className="hover:text-accent-blue transition-colors">PVC Cards</Link>
             <Link to="/photos" className="hover:text-accent-blue transition-colors">Photos</Link>
-            <Link to="/track-order" className="hover:text-accent-blue transition-colors flex items-center gap-1.5">
-              <Search size={14} />
-              Track
-            </Link>
+            
+            {/* Search Bar */}
+            <div className="relative group">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors" />
+              <input 
+                type="text" 
+                placeholder="Search services..." 
+                className="bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-accent-blue/20 w-40 focus:w-60 transition-all outline-none"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -85,7 +118,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             </button>
 
             <div className="hidden lg:flex items-center gap-4">
-              {user?.email === 'shankarboss3@gmail.com' && (
+              {user?.email === adminEmail && (
                 <Link to="/admin" className="flex items-center gap-1.5 text-slate-600 hover:text-accent-blue font-bold text-sm">
                   <Settings size={16} />
                   Admin
@@ -123,7 +156,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             <Link to="/photos" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Photos</Link>
             <Link to="/track-order" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Track Order</Link>
             <hr className="border-slate-200" />
-            {user?.email === 'shankarboss3@gmail.com' && (
+            {user?.email === adminEmail && (
               <Link to="/admin" className="flex items-center gap-2 hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>
                 <Settings size={18} />
                 Admin Panel
@@ -158,7 +191,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
               <div className="w-8 h-8 bg-accent-blue rounded-xl flex items-center justify-center text-white rotate-12">
                 <ShieldCheck size={20} />
               </div>
-              <span>MS STAR</span>
+              <span>M S STAR XEROX</span>
             </div>
             <p className="text-slate-400 text-sm leading-relaxed font-medium">
               Premium printing services for documents, PVC cards, and photos. 
@@ -192,7 +225,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             <ul className="space-y-3 text-slate-400 text-sm font-bold">
               <li><Link to="/privacy-policy" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Privacy Policy</Link></li>
               <li><Link to="/terms-conditions" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Terms & Conditions</Link></li>
-              <li><Link to="/refund-cancellation" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Refund & Cancellation</Link></li>
+              <li><Link to="/refund-cancellation" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Refund/Cancellation Policy</Link></li>
               <li><Link to="/shipping-policy" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Shipping Policy</Link></li>
             </ul>
           </div>
@@ -202,7 +235,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             <ul className="space-y-4 text-slate-400 text-sm font-bold">
               <li className="flex items-start gap-3">
                 <MapPin size={18} className="text-accent-blue shrink-0 mt-0.5" />
-                <span>M S Star Xerox and Stationery<br/>Gunjur, Bangalore, Karnataka</span>
+                <span>M S STAR XEROX<br/>no 247 gunjur bangalore 560087</span>
               </li>
               <li className="flex items-center gap-3">
                 <Phone size={18} className="text-accent-blue shrink-0" />
@@ -217,7 +250,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
         </div>
         <div className="max-w-7xl mx-auto px-6 pt-12 mt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 text-slate-500 text-xs font-bold">
           <div className="flex items-center gap-3">
-            <p>© 2026 MS STAR PRINTING. ALL RIGHTS RESERVED.</p>
+            <p>© 2026 M S STAR XEROX. ALL RIGHTS RESERVED.</p>
             <Link to="/admin" className="text-white/10 hover:text-white/40 transition-colors" title="Admin Login">
               <Lock size={12} />
             </Link>
@@ -229,6 +262,20 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
           </div>
         </div>
       </footer>
+      
+      {/* Floating WhatsApp Button */}
+      <a 
+        href="https://wa.me/919901526231" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed bottom-8 right-8 z-[100] bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
+        aria-label="Chat on WhatsApp"
+      >
+        <MessageCircle size={28} />
+        <span className="absolute right-full mr-4 bg-white text-ink px-4 py-2 rounded-xl text-xs font-black shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-100">
+          Need Help? Chat with us!
+        </span>
+      </a>
     </div>
   );
 }
@@ -277,6 +324,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Layout>
       </BrowserRouter>

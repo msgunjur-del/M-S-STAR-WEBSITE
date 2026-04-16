@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db, auth, storage } from '../firebase';
 import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateEmail, updatePassword, signInWithPopup, GoogleAuthProvider, signInAnonymously } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   LayoutDashboard, ShoppingCart, ClipboardList, FileText, Package, 
@@ -35,6 +35,80 @@ const recentUploads = [
   { name: 'New Microsoft Word Document (6).docx', date: '3/21/2026' },
 ];
 
+// --- Firestore Error Handling ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  return errInfo;
+}
+
+const compressImageToBase64 = (file: File, maxWidth = 800): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ratio = Math.min(maxWidth / img.width, 1);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality JPEG
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [products, setProducts] = useState<any[]>([]);
@@ -50,15 +124,14 @@ export default function AdminPanel() {
   });
   const [user, setUser] = useState<any>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('shankarboss3@gmail.com');
   
   // Authentication State
   const [isAuthorized, setIsAuthorized] = useState(sessionStorage.getItem('admin_auth') === 'true');
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-
-  const ADMIN_EMAIL = 'shankarboss3@gmail.com';
 
   // Existing state for Products/Orders
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -74,16 +147,60 @@ export default function AdminPanel() {
   const [endDate, setEndDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const fetchAdminEmail = async () => {
+    try {
+      const settingsSnap = await getDoc(doc(db, 'settings', 'global'));
+      if (settingsSnap.exists() && settingsSnap.data().adminEmail) {
+        setAdminEmail(settingsSnap.data().adminEmail);
+        return settingsSnap.data().adminEmail;
+      }
+    } catch (error) {
+      console.error("Error fetching admin email:", error);
+    }
+    return 'shankarboss3@gmail.com';
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    let currentAdminEmail = adminEmail;
+
+    fetchAdminEmail().then(email => {
+      currentAdminEmail = email;
+    });
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // If we are already authorized via custom login, ensure we have a Firebase session
+      if (sessionStorage.getItem('admin_auth') === 'true') {
+        if (!currentUser) {
+          try {
+            await signInAnonymously(auth);
+            // The next onAuthStateChanged call will handle the rest
+            return;
+          } catch (err: any) {
+            console.error("Failed to restore anonymous session:", err);
+            if (err.code === 'auth/admin-restricted-operation') {
+              console.warn("Anonymous Authentication is disabled. Storage uploads will fail.");
+            }
+          }
+        }
+        if (!user) setUser(currentUser || { email: 'admin' });
+        setIsAuthorized(true);
+        fetchData();
+        return;
+      }
+
       setUser(currentUser);
-      if (currentUser?.email === ADMIN_EMAIL) {
+      
+      // Re-fetch to ensure we have the latest
+      const latestAdminEmail = await fetchAdminEmail();
+
+      if (currentUser?.email === latestAdminEmail) {
         setIsAuthorized(true);
         sessionStorage.setItem('admin_auth', 'true');
         fetchData();
       } else if (currentUser) {
         // Logged in but not admin
         setIsAuthorized(false);
+        sessionStorage.removeItem('admin_auth');
         setAccessDenied(true);
       } else {
         // Not logged in
@@ -99,16 +216,30 @@ export default function AdminPanel() {
     setLoginError('');
     setIsAuthenticating(true);
     
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      if (userCredential.user.email !== ADMIN_EMAIL) {
-        setLoginError("Access denied. This account does not have administrative privileges.");
-        await signOut(auth);
+    // Simple custom login check
+    if (loginUsername === 'admin' && loginPassword === 'Ammu@6231') {
+      try {
+        // Sign in anonymously to Firebase to allow Storage uploads
+        try {
+          await signInAnonymously(auth);
+        } catch (anonErr: any) {
+          console.warn("Anonymous auth disabled. Image uploads may fail.", anonErr);
+          if (anonErr.code === 'auth/admin-restricted-operation') {
+            alert("Warning: Anonymous Authentication is disabled in your Firebase Console. Image uploads will fail. Please enable it in Firebase Console -> Authentication -> Sign-in method.");
+          }
+        }
+        setIsAuthorized(true);
+        sessionStorage.setItem('admin_auth', 'true');
+        setUser({ email: 'admin' });
+        fetchData();
+        setIsAuthenticating(false);
+      } catch (err: any) {
+        console.error("Login error:", err);
+        setLoginError("Failed to initialize secure session: " + err.message);
+        setIsAuthenticating(false);
       }
-    } catch (error: any) {
-      console.error("Admin login error:", error);
-      setLoginError("Invalid email or password.");
-    } finally {
+    } else {
+      setLoginError("Invalid User ID or password.");
       setIsAuthenticating(false);
     }
   };
@@ -116,16 +247,21 @@ export default function AdminPanel() {
   const handleGoogleLogin = async () => {
     setLoginError('');
     setIsAuthenticating(true);
-    const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      if (result.user.email !== ADMIN_EMAIL) {
-        setLoginError("Access denied. This Google account is not authorized.");
+      const latestAdminEmail = await fetchAdminEmail();
+      
+      if (result.user.email === latestAdminEmail) {
+        setIsAuthorized(true);
+        sessionStorage.setItem('admin_auth', 'true');
+        fetchData();
+      } else {
+        setLoginError("This Google account is not authorized as an administrator.");
         await signOut(auth);
       }
-    } catch (error) {
-      console.error("Google login error:", error);
+    } catch (err: any) {
+      console.error("Google login error:", err);
       setLoginError("Failed to sign in with Google.");
     } finally {
       setIsAuthenticating(false);
@@ -140,8 +276,15 @@ export default function AdminPanel() {
       const ordersSnapshot = await getDocs(collection(db, 'orders'));
       setOrders(ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-      const usersSnapshot = await getDocs(collection(db, 'users'));
-      setUsers(usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // Only fetch users if we are actually authenticated with Firebase
+      if (auth.currentUser) {
+        try {
+          const usersSnapshot = await getDocs(collection(db, 'users'));
+          setUsers(usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (err) {
+          console.warn("Could not fetch users list (likely unauthenticated with Firebase):", err);
+        }
+      }
 
       const settingsSnap = await getDoc(doc(db, 'settings', 'global'));
       if (settingsSnap.exists()) {
@@ -162,24 +305,94 @@ export default function AdminPanel() {
     window.location.href = '/';
   };
 
+  const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
+
+  const loadDefaultProducts = async () => {
+    setActionMessage({ type: 'info', text: 'Loading default products...' });
+    const INITIAL_SERVICES = [
+      { title: 'PVC Aadhaar Card Printing', description: 'Waterproof and durable PVC printing for your e-Aadhaar.', price: 50, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1633265486064-086b219458ce?w=800&q=80' },
+      { title: 'PVC PAN Card Printing', description: 'Official standard PVC printing for your permanent account number card.', price: 50, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80' },
+      { title: 'PVC Voter ID Printing', description: 'Get your digital voter ID converted to a long-lasting PVC card.', price: 50, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80' },
+      { title: 'PVC Health Card Printing', description: 'Durable Ayushman Bharat or State Health IDs on smart cards.', price: 60, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=800&q=80' },
+      { title: 'PVC Smart ID Card', description: 'Custom institutional or corporate employee IDs with HD print.', price: 75, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=80' },
+      { title: 'Passport Size Photo (Set of 8)', description: 'Premium quality studio finish passport photos for all official uses.', price: 40, category: 'PHOTOS', imageUrl: '/images/sample-girl.png' },
+      { title: '4x6 Photo Print', description: 'High-gloss 4x6 inch photographic memories for your albums.', price: 15, category: 'PHOTOS', imageUrl: '/images/sample-boy.png' },
+      { title: 'Stamp Size Photo (Set of 16)', description: 'Set of 16 precision-cut stamp size photos for admission forms.', price: 30, category: 'PHOTOS', imageUrl: '/images/sample-6-4.png' }
+    ];
+
+    try {
+      for (const service of INITIAL_SERVICES) {
+        await addDoc(collection(db, 'products'), {
+          ...service,
+          adminKey: 'Ammu@6231'
+        });
+      }
+      setActionMessage({ type: 'success', text: 'Default products loaded successfully!' });
+      fetchData();
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error("Error loading default products:", error);
+      setActionMessage({ type: 'error', text: 'Failed to load default products.' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    }
+  };
+
+  const handleDirectMainImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, productId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploadingImage(true);
+    setActionMessage({ type: 'info', text: 'Uploading image to storage...' });
+    try {
+      if (!auth.currentUser) {
+        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      }
+      
+      const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      await updateDoc(doc(db, 'products', productId), {
+        imageUrl: downloadURL,
+        adminKey: 'Ammu@6231'
+      });
+      setActionMessage({ type: 'success', text: 'Main image updated successfully!' });
+      fetchData();
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error: any) {
+      console.error("Error uploading image:", error);
+      setActionMessage({ type: 'error', text: 'Upload failed: ' + error.message });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewProduct: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setUploadingImage(true);
+    setActionMessage({ type: 'info', text: 'Uploading image...' });
+    
     try {
+      if (!auth.currentUser) {
+        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      }
+      
       const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
       
       if (isNewProduct) {
-        setNewProduct({ ...newProduct, imageUrl: downloadURL });
+        setNewProduct(prev => prev ? { ...prev, imageUrl: downloadURL } : null);
       } else {
-        setEditingProduct({ ...editingProduct, imageUrl: downloadURL });
+        setEditingProduct(prev => prev ? { ...prev, imageUrl: downloadURL } : null);
       }
-    } catch (error) {
+      setActionMessage({ type: 'success', text: 'Image uploaded successfully!' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error: any) {
       console.error("Error uploading image:", error);
-      alert("Failed to upload image. Please try again.");
+      setActionMessage({ type: 'error', text: 'Upload failed: ' + error.message });
     } finally {
       setUploadingImage(false);
     }
@@ -190,7 +403,11 @@ export default function AdminPanel() {
     if (!files || files.length === 0) return;
     
     setUploadingGallery(true);
+    setActionMessage({ type: 'info', text: `Uploading ${files.length} gallery images...` });
     try {
+      if (!auth.currentUser) {
+        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      }
       const newImageUrls: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -203,12 +420,14 @@ export default function AdminPanel() {
       const updatedGallery = [...(product.galleryImages || []), ...newImageUrls];
       await updateDoc(doc(db, 'products', product.id), { 
         galleryImages: updatedGallery,
-        adminKey: 'Ammu@6231' // Include secret key for rules bypass
+        adminKey: 'Ammu@6231'
       });
+      setActionMessage({ type: 'success', text: 'Gallery updated successfully!' });
       fetchData();
-    } catch (error) {
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error: any) {
       console.error("Error uploading gallery images:", error);
-      alert("Failed to upload gallery images.");
+      setActionMessage({ type: 'error', text: 'Gallery upload failed: ' + error.message });
     } finally {
       setUploadingGallery(false);
     }
@@ -226,6 +445,85 @@ export default function AdminPanel() {
     fetchData();
   };
 
+  const handleFormGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewProduct: boolean) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setUploadingGallery(true);
+    setActionMessage({ type: 'info', text: `Uploading ${files.length} gallery images...` });
+    
+    try {
+      if (!auth.currentUser) {
+        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      }
+      const newImageUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const storageRef = ref(storage, `products/gallery/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(storageRef);
+        newImageUrls.push(downloadURL);
+      }
+      
+      if (isNewProduct) {
+        setNewProduct(prev => prev ? { 
+          ...prev, 
+          galleryImages: [...(prev.galleryImages || []), ...newImageUrls] 
+        } : null);
+      } else {
+        setEditingProduct(prev => prev ? { 
+          ...prev, 
+          galleryImages: [...(prev.galleryImages || []), ...newImageUrls] 
+        } : null);
+      }
+      
+      setActionMessage({ type: 'success', text: 'Gallery images uploaded successfully!' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error: any) {
+      console.error("Error uploading gallery images:", error);
+      setActionMessage({ type: 'error', text: 'Gallery upload failed: ' + error.message });
+    } finally {
+      setUploadingGallery(false);
+    }
+  };
+
+  const setAsPrimary = (url: string, isNewProduct: boolean) => {
+    if (isNewProduct) {
+      setNewProduct(prev => prev ? { ...prev, imageUrl: url } : null);
+    } else {
+      setEditingProduct(prev => prev ? { ...prev, imageUrl: url } : null);
+    }
+  };
+
+  const removeFormGalleryImage = (url: string, isNewProduct: boolean) => {
+    if (isNewProduct) {
+      setNewProduct(prev => prev ? { 
+        ...prev, 
+        galleryImages: (prev.galleryImages || []).filter((img: string) => img !== url) 
+      } : null);
+    } else {
+      setEditingProduct(prev => prev ? { 
+        ...prev, 
+        galleryImages: (prev.galleryImages || []).filter((img: string) => img !== url) 
+      } : null);
+    }
+  };
+
+  const setAsPrimaryDirect = async (productId: string, url: string) => {
+    try {
+      await updateDoc(doc(db, 'products', productId), { 
+        imageUrl: url,
+        adminKey: 'Ammu@6231'
+      });
+      fetchData();
+      setActionMessage({ type: 'success', text: 'Main image updated from gallery!' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error("Error setting primary image:", error);
+      alert("Failed to set primary image.");
+    }
+  };
+
   const handleOrderFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isDirect: boolean = false, isProcessed: boolean = false) => {
     const file = e.target.files?.[0];
     const targetOrder = isDirect ? viewingOrder : editingOrder;
@@ -233,6 +531,16 @@ export default function AdminPanel() {
     
     setUploadingOrderFile(true);
     try {
+      if (!auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (anonErr: any) {
+          if (anonErr.code === 'auth/admin-restricted-operation') {
+            throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images.");
+          }
+          throw anonErr;
+        }
+      }
       const folder = isProcessed ? 'processed' : 'customer';
       const storageRef = ref(storage, `orders/${targetOrder.id}/${folder}/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
@@ -288,39 +596,68 @@ export default function AdminPanel() {
 
   const addProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const imageUrl = newProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
-    await addDoc(collection(db, 'products'), {
-      title: newProduct.title,
-      description: newProduct.description,
-      price: Number(newProduct.price),
-      category: newProduct.category,
-      imageUrl: imageUrl,
-      adminKey: 'Ammu@6231'
-    });
-    setNewProduct(null);
-    fetchData();
+    setActionMessage({ type: 'info', text: 'Saving product...' });
+    try {
+      const imageUrl = newProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
+      await addDoc(collection(db, 'products'), {
+        title: newProduct.title,
+        description: newProduct.description,
+        price: Number(newProduct.price),
+        category: newProduct.category,
+        imageUrl: imageUrl,
+        galleryImages: newProduct.galleryImages || [],
+        adminKey: 'Ammu@6231'
+      });
+      setNewProduct(null);
+      setActionMessage({ type: 'success', text: 'Product added successfully!' });
+      fetchData();
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.CREATE, 'products');
+      setActionMessage({ type: 'error', text: 'Failed to add product: ' + errInfo.error });
+    }
   };
 
   const updateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const imageUrl = editingProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
-    await updateDoc(doc(db, 'products', editingProduct.id), {
-      title: editingProduct.title,
-      description: editingProduct.description,
-      price: Number(editingProduct.price),
-      category: editingProduct.category,
-      imageUrl: imageUrl,
-      adminKey: 'Ammu@6231'
-    });
-    setEditingProduct(null);
-    fetchData();
+    setActionMessage({ type: 'info', text: 'Updating product...' });
+    try {
+      const imageUrl = editingProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
+      await updateDoc(doc(db, 'products', editingProduct.id), {
+        title: editingProduct.title,
+        description: editingProduct.description,
+        price: Number(editingProduct.price),
+        category: editingProduct.category,
+        imageUrl: imageUrl,
+        galleryImages: editingProduct.galleryImages || [],
+        adminKey: 'Ammu@6231'
+      });
+      setEditingProduct(null);
+      setActionMessage({ type: 'success', text: 'Product updated successfully!' });
+      fetchData();
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `products/${editingProduct.id}`);
+      setActionMessage({ type: 'error', text: 'Failed to update product: ' + errInfo.error });
+    }
   };
 
   const updateOrderStatus = async (id: string, status: string) => {
-    await updateDoc(doc(db, 'orders', id), { 
-      status
-    });
-    fetchData();
+    try {
+      setActionMessage({ type: 'info', text: `Updating order status to ${status}...` });
+      await updateDoc(doc(db, 'orders', id), { 
+        status,
+        adminKey: 'Ammu@6231'
+      });
+      await fetchData();
+      setActionMessage({ type: 'success', text: 'Order status updated successfully!' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `orders/${id}`);
+      setActionMessage({ type: 'error', text: 'Failed to update status: ' + errInfo.error });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 5000);
+    }
   };
 
   const deleteOrder = async (id: string) => {
@@ -357,6 +694,59 @@ export default function AdminPanel() {
     }
   };
 
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [securityUpdateMessage, setSecurityUpdateMessage] = useState('');
+  const [securityUpdateError, setSecurityUpdateError] = useState('');
+
+  const updateAdminCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityUpdateMessage('');
+    setSecurityUpdateError('');
+
+    if (!auth.currentUser) {
+      setSecurityUpdateError('You must be logged in to update credentials.');
+      return;
+    }
+
+    try {
+      let emailUpdated = false;
+      let passwordUpdated = false;
+
+      if (newAdminEmail && newAdminEmail !== auth.currentUser.email) {
+        await updateEmail(auth.currentUser, newAdminEmail);
+        // Also update the global settings so the app knows the new admin email
+        const { setDoc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'settings', 'global'), { 
+          adminEmail: newAdminEmail,
+          adminKey: 'Ammu@6231'
+        }, { merge: true });
+        setAdminEmail(newAdminEmail);
+        emailUpdated = true;
+      }
+
+      if (newAdminPassword) {
+        await updatePassword(auth.currentUser, newAdminPassword);
+        passwordUpdated = true;
+      }
+
+      if (emailUpdated || passwordUpdated) {
+        setSecurityUpdateMessage(`Successfully updated ${emailUpdated ? 'email' : ''} ${emailUpdated && passwordUpdated ? 'and' : ''} ${passwordUpdated ? 'password' : ''}.`);
+        setNewAdminEmail('');
+        setNewAdminPassword('');
+      } else {
+        setSecurityUpdateMessage('No changes were made.');
+      }
+    } catch (error: any) {
+      console.error("Error updating credentials:", error);
+      if (error.code === 'auth/requires-recent-login') {
+        setSecurityUpdateError('This operation is sensitive and requires recent authentication. Please log out and log back in before trying again.');
+      } else {
+        setSecurityUpdateError(error.message || 'Failed to update credentials.');
+      }
+    }
+  };
+
   const updateOrderDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingOrder) return;
@@ -371,12 +761,58 @@ export default function AdminPanel() {
         files: editingOrder.files || [],
         processedFiles: editingOrder.processedFiles || [],
         trackingNumber: editingOrder.trackingNumber || '',
+        courier: editingOrder.courier || 'Delhivery',
+        shippingMethod: editingOrder.shippingMethod || 'Standard',
+        shippingCost: Number(editingOrder.shippingCost) || 0,
+        status: editingOrder.status || 'Pending',
         adminKey: 'Ammu@6231'
       });
       setEditingOrder(null);
       fetchData();
+      setActionMessage({ type: 'success', text: 'Order details updated successfully!' });
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       console.error("Error updating order:", error);
+      const errInfo = handleFirestoreError(error, OperationType.UPDATE, `orders/${editingOrder.id}`);
+      setActionMessage({ type: 'error', text: 'Failed to update order: ' + errInfo.error });
+    }
+  };
+
+  const fixAdminPermissions = async () => {
+    if (!auth.currentUser) {
+      setActionMessage({ type: 'error', text: 'You must be logged in to fix permissions.' });
+      return;
+    }
+    
+    setActionMessage({ type: 'info', text: 'Fixing admin permissions and repairing database...' });
+    try {
+      const { setDoc, writeBatch } = await import('firebase/firestore');
+      
+      // 1. Fix current user role
+      await setDoc(doc(db, 'users', auth.currentUser.uid), {
+        email: auth.currentUser.email,
+        role: 'admin',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // 2. Repair all products (ensure adminKey and valid structure)
+      const batch = writeBatch(db);
+      products.forEach(p => {
+        batch.update(doc(db, 'products', p.id), {
+          adminKey: 'Ammu@6231',
+          galleryImages: p.galleryImages || [],
+          // Fix broken/placeholder images if they look like local paths that don't exist
+          imageUrl: p.imageUrl?.startsWith('/images/') ? `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80` : (p.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`)
+        });
+      });
+      await batch.commit();
+      
+      setActionMessage({ type: 'success', text: 'Database repaired and permissions fixed!' });
+      fetchData();
+      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+    } catch (error: any) {
+      console.error("Error repairing database:", error);
+      setActionMessage({ type: 'error', text: 'Repair failed: ' + error.message });
     }
   };
 
@@ -425,19 +861,22 @@ export default function AdminPanel() {
 
   const totalFiles = orders.reduce((sum, o) => sum + (o.files?.length || 0), 0);
 
-  const renderSidebarItem = (name: string, Icon: any) => (
-    <button 
-      onClick={() => setActiveTab(name)}
-      className={`w-full flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
-        activeTab === name 
-          ? 'bg-blue-900 text-white rounded-r-full mr-4' 
-          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-      }`}
-    >
-      <Icon size={18} />
-      {name}
-    </button>
-  );
+  const renderSidebarItem = (name: string, Icon: any) => {
+    const isActive = activeTab === name;
+    return (
+      <button 
+        onClick={() => setActiveTab(name)}
+        className={`w-[90%] mx-auto flex items-center gap-3 px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all rounded-xl mb-1 ${
+          isActive 
+            ? 'bg-accent-blue text-white shadow-lg shadow-blue-200 translate-x-1' 
+            : 'text-slate-500 hover:bg-slate-50 hover:text-ink'
+        }`}
+      >
+        <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
+        {name}
+      </button>
+    );
+  };
 
   if (!isAuthorized) {
     return (
@@ -453,13 +892,13 @@ export default function AdminPanel() {
 
           <form onSubmit={handleAdminLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">Admin Email</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">User ID</label>
               <input 
-                type="email" 
-                value={loginEmail} 
-                onChange={e => setLoginEmail(e.target.value)} 
+                type="text" 
+                value={loginUsername} 
+                onChange={e => setLoginUsername(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-                placeholder="admin@example.com"
+                placeholder="Enter User ID"
                 required 
               />
             </div>
@@ -500,7 +939,7 @@ export default function AdminPanel() {
               <div className="w-full border-t border-slate-100"></div>
             </div>
             <div className="relative flex justify-center text-xs font-bold uppercase">
-              <span className="bg-white px-4 text-slate-400">Or</span>
+              <span className="bg-white px-4 text-slate-400">Or continue with</span>
             </div>
           </div>
 
@@ -510,7 +949,7 @@ export default function AdminPanel() {
             className="w-full bg-white border border-slate-200 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
           >
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/pwa/google.svg" alt="Google" className="w-5 h-5" />
-            Sign in with Google
+            Google Account
           </button>
 
           <div className="mt-8 text-center">
@@ -590,7 +1029,36 @@ export default function AdminPanel() {
       <main className="flex-1 ml-64 p-8">
         {activeTab === 'Dashboard' && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-bold font-headline text-slate-900">Dashboard Overview</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Dashboard Overview</h2>
+              <button onClick={fetchData} className="bg-slate-100 text-slate-600 p-2 rounded-lg hover:bg-slate-200 transition-colors" title="Refresh Data">
+                <Upload size={18} className="rotate-180" />
+              </button>
+            </div>
+
+            {/* System Status */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <ShieldCheck className="text-blue-600" size={18} />
+                System Authorization Status
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <p className="text-slate-500 mb-1">Current User</p>
+                  <p className="font-bold text-slate-900">{user?.email || 'Not Logged In'}</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <p className="text-slate-500 mb-1">Admin Status (UI)</p>
+                  <p className={`font-bold ${isAuthorized ? 'text-green-600' : 'text-red-600'}`}>
+                    {isAuthorized ? 'Authorized' : 'Unauthorized'}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <p className="text-slate-500 mb-1">Database Connection</p>
+                  <p className="font-bold text-green-600">Connected</p>
+                </div>
+              </div>
+            </div>
             
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -692,8 +1160,31 @@ export default function AdminPanel() {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-bold font-headline text-slate-900">Manage Products</h2>
-              <button onClick={() => setNewProduct({ title: '', description: '', price: '', category: 'PVC CARDS', imageUrl: '' })} className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New Product</button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={fixAdminPermissions}
+                  className="bg-amber-100 text-amber-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-200 transition-colors border border-amber-200 flex items-center gap-2"
+                >
+                  <ShieldCheck size={16} />
+                  Repair Database
+                </button>
+                <button onClick={fetchData} className="bg-slate-100 text-slate-600 p-2 rounded-lg hover:bg-slate-200 transition-colors" title="Refresh Data">
+                  <Upload size={18} className="rotate-180" />
+                </button>
+                <button onClick={() => setNewProduct({ title: '', description: '', price: '', category: 'PVC CARDS', imageUrl: '' })} className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New Product</button>
+              </div>
             </div>
+
+            {actionMessage.text && (
+              <div className={`p-4 rounded-xl text-sm font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
+
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-600">
@@ -719,7 +1210,15 @@ export default function AdminPanel() {
                         </td>
                         <td className="p-4">
                           <p className="font-bold text-slate-900">{product.title}</p>
-                          <p className="text-xs text-slate-500 truncate max-w-[200px]">{product.description}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-500 truncate max-w-[150px]">{product.description}</p>
+                            {product.galleryImages?.length > 0 && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                <ImageIcon size={10} />
+                                {product.galleryImages.length}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4">
                           <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold uppercase tracking-wider">
@@ -730,6 +1229,11 @@ export default function AdminPanel() {
                         <td className="p-4">
                           <div className="flex gap-2">
                             <button onClick={() => setEditingProduct(product)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-100">Edit</button>
+                            <label className="cursor-pointer bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-100 flex items-center gap-1">
+                              <Upload size={12} />
+                              {uploadingImage ? '...' : 'Image'}
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleDirectMainImageUpload(e, product.id)} disabled={uploadingImage} />
+                            </label>
                             <button onClick={() => deleteProduct(product.id)} className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-100">Remove</button>
                           </div>
                         </td>
@@ -751,6 +1255,17 @@ export default function AdminPanel() {
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-bold font-headline text-slate-900">Manage Orders</h2>
             </div>
+
+            {actionMessage.text && (
+              <div className={`p-4 rounded-xl text-sm font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
+
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by name or email..." className="border border-slate-200 rounded-lg p-2 text-sm flex-1 min-w-[200px]" />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-slate-200 rounded-lg p-2 text-sm">
@@ -848,14 +1363,33 @@ export default function AdminPanel() {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-bold font-headline text-slate-900">PVC Card Services</h2>
-              <button onClick={() => setNewProduct({ title: '', description: '', price: '', category: 'PVC CARDS', imageUrl: '' })} className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New PVC Card</button>
+              <div className="flex gap-3">
+                <button onClick={loadDefaultProducts} className="bg-slate-100 text-slate-700 px-6 py-2 rounded-lg font-bold hover:bg-slate-200 transition-colors border border-slate-200">Load Default Cards</button>
+                <button onClick={() => setNewProduct({ title: '', description: '', price: '', category: 'PVC CARDS', imageUrl: '' })} className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New PVC Card</button>
+              </div>
             </div>
+
+            {actionMessage.text && (
+              <div className={`p-4 rounded-xl text-sm font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
             
             <div className="grid grid-cols-1 gap-8">
               {products.filter(p => p.category === 'PVC CARDS').map(product => (
                 <div key={product.id} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                   <div className="flex flex-col md:flex-row gap-6 items-start">
-                    <img src={product.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=400&q=80`} alt={product.title} className="w-32 h-32 object-cover rounded-xl border border-slate-100" referrerPolicy="no-referrer" />
+                    <div className="flex flex-col gap-3">
+                      <img src={product.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=400&q=80`} alt={product.title} className="w-32 h-32 object-cover rounded-xl border border-slate-100" referrerPolicy="no-referrer" />
+                      <label className="cursor-pointer bg-slate-50 text-slate-600 px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-100 text-center border border-slate-200 transition-colors">
+                        {uploadingImage ? 'Uploading...' : 'Change Main Image'}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleDirectMainImageUpload(e, product.id)} disabled={uploadingImage} />
+                      </label>
+                    </div>
                     <div className="flex-1">
                       <h3 className="text-2xl font-bold text-slate-900">{product.title}</h3>
                       <p className="text-slate-600 mt-1">{product.description}</p>
@@ -875,18 +1409,26 @@ export default function AdminPanel() {
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
                       {product.galleryImages?.map((url: string, idx: number) => (
-                        <div key={idx} className="relative group">
-                          <img src={url} alt={`Gallery ${idx}`} className="w-full h-24 object-cover rounded-lg border border-slate-200" referrerPolicy="no-referrer" />
-                          <button 
-                            onClick={() => removeGalleryImage(product.id, url)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                          >
-                            ×
-                          </button>
+                        <div key={idx} className="relative group aspect-square">
+                          <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${product.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
+                            <button 
+                              onClick={() => setAsPrimaryDirect(product.id, url)}
+                              className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
+                            >
+                              Primary
+                            </button>
+                            <button 
+                              onClick={() => removeGalleryImage(product.id, url)}
+                              className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
                       ))}
                       
-                      <div className="relative border-2 border-dashed border-slate-200 rounded-lg h-24 flex flex-col items-center justify-center hover:bg-slate-50 transition-colors cursor-pointer">
+                      <div className="relative border-2 border-dashed border-slate-200 rounded-lg h-full aspect-square flex flex-col items-center justify-center hover:bg-slate-50 transition-colors cursor-pointer">
                         <Upload size={20} className="text-slate-400 mb-1" />
                         <span className="text-[10px] text-slate-500 font-bold">{uploadingGallery ? 'Uploading...' : 'Add Images'}</span>
                         <input 
@@ -900,6 +1442,84 @@ export default function AdminPanel() {
                       </div>
                     </div>
                     <p className="text-xs text-slate-500 italic">These images will be displayed as thumbnails on the product details page.</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Service Orders' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Document Service Orders</h2>
+              <button onClick={fetchData} className="bg-slate-100 text-slate-600 p-2 rounded-lg hover:bg-slate-200 transition-colors" title="Refresh Data">
+                <Upload size={18} className="rotate-180" />
+              </button>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="p-4 font-medium">Order ID</th>
+                    <th className="p-4 font-medium">Customer</th>
+                    <th className="p-4 font-medium">Service Type</th>
+                    <th className="p-4 font-medium">Status</th>
+                    <th className="p-4 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {orders.filter(o => o.type === 'service').length > 0 ? (
+                    orders.filter(o => o.type === 'service').map(order => (
+                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-mono text-xs text-blue-600">#{order.id}</td>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-900">{order.customerName}</p>
+                          <p className="text-[10px] text-slate-500">{order.customerEmail}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[10px] font-bold uppercase">
+                            {order.serviceType || 'Printing'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                            order.status === 'Delivered' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {order.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <button onClick={() => setViewingOrder(order)} className="text-blue-600 font-bold hover:underline">View Details</button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-500">No service orders found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Service Photos' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Service Sample Photos</h2>
+              <button className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add Sample Photo</button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+              {products.filter(p => p.category === 'PHOTOS').map(photo => (
+                <div key={photo.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="aspect-square bg-slate-100 rounded-lg overflow-hidden">
+                    <img src={photo.imageUrl} alt={photo.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 truncate">{photo.title}</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingProduct(photo)} className="flex-1 bg-slate-50 text-slate-600 py-1 rounded text-[10px] font-bold hover:bg-slate-100">Edit</button>
                   </div>
                 </div>
               ))}
@@ -1054,9 +1674,136 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {activeTab === 'Other Services' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Other Printing Services</h2>
+              <button onClick={() => setNewProduct({ title: '', description: '', price: '', category: 'DOCUMENTS', imageUrl: '' })} className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New Service</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {products.filter(p => p.category !== 'PVC CARDS').map(product => (
+                <div key={product.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                  <div className="aspect-square bg-slate-100 rounded-xl overflow-hidden">
+                    <img src={product.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=400&q=80`} alt={product.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">{product.title}</h3>
+                    <p className="text-xs text-slate-500 line-clamp-2">{product.description}</p>
+                    <p className="text-blue-700 font-bold mt-2">₹{product.price}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingProduct(product)} className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold hover:bg-blue-100">Edit</button>
+                    <button onClick={() => deleteProduct(product.id)} className="flex-1 bg-red-50 text-red-700 py-2 rounded-lg text-xs font-bold hover:bg-red-100">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Pages' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Page Content Management</h2>
+              <p className="text-sm text-slate-500 italic">Manage static content across the website</p>
+            </div>
+            <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center space-y-4">
+              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                <File size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Content Management System</h3>
+              <p className="text-slate-500 max-w-md mx-auto">
+                The CMS module is being synchronized with your Firestore collections. You can currently edit products and services which populate the main pages.
+              </p>
+              <div className="flex justify-center gap-4 pt-4">
+                <button onClick={() => setActiveTab('Products')} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors">Manage Products</button>
+                <button onClick={() => setActiveTab('PVC Services')} className="bg-slate-100 text-slate-700 px-6 py-2 rounded-lg font-bold hover:bg-slate-200 transition-colors">Manage Services</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'Banners' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Hero Banners & Promotions</h2>
+              <button className="bg-blue-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-800 transition-colors">Add New Banner</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden relative group">
+                  <img src="https://images.unsplash.com/photo-1586075010633-24426d5628fa?w=800&q=80" alt="Banner" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button className="bg-white text-ink px-4 py-2 rounded-lg font-bold text-sm">Change Image</button>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">Main Hero Banner</h3>
+                  <p className="text-xs text-slate-500">Currently active on the homepage</p>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 bg-blue-50 text-blue-700 py-2 rounded-lg text-xs font-bold hover:bg-blue-100">Edit Text</button>
+                  <button className="flex-1 bg-red-50 text-red-700 py-2 rounded-lg text-xs font-bold hover:bg-red-100">Disable</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'Settings' && (
           <div className="space-y-6">
-            <h2 className="text-3xl font-bold font-headline text-slate-900">Global Settings & Pricing</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-bold font-headline text-slate-900">Global Settings & Pricing</h2>
+              <div className="flex gap-3">
+                <button 
+                  onClick={async () => {
+                    setActionMessage({ type: 'info', text: 'Testing storage...' });
+                    try {
+                      if (!auth.currentUser) {
+                        try {
+                          await signInAnonymously(auth);
+                        } catch (anonErr: any) {
+                          if (anonErr.code === 'auth/admin-restricted-operation') {
+                            throw new Error("Please enable Anonymous Authentication in Firebase Console.");
+                          }
+                          throw anonErr;
+                        }
+                      }
+                      const blob = new Blob(['test'], { type: 'text/plain' });
+                      const storageRef = ref(storage, `test_${Date.now()}.txt`);
+                      await uploadBytes(storageRef, blob);
+                      setActionMessage({ type: 'success', text: 'Storage test passed!' });
+                      setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
+                    } catch (error: any) {
+                      console.error("Storage test failed:", error);
+                      setActionMessage({ type: 'error', text: 'Storage test failed: ' + error.message });
+                    }
+                  }}
+                  className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors border border-blue-200 flex items-center gap-2"
+                >
+                  <Upload size={16} />
+                  Test Storage
+                </button>
+                <button 
+                  onClick={fixAdminPermissions}
+                  className="bg-amber-100 text-amber-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-200 transition-colors border border-amber-200 flex items-center gap-2"
+                >
+                  <ShieldCheck size={16} />
+                  Fix Admin Permissions
+                </button>
+              </div>
+            </div>
+            
+            {actionMessage.text && (
+              <div className={`p-4 rounded-xl text-sm font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
+
             <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm max-w-2xl">
               <form onSubmit={updateSettings} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1138,6 +1885,47 @@ export default function AdminPanel() {
                 </button>
               </form>
             </div>
+
+            <h2 className="text-3xl font-bold font-headline text-slate-900 mt-12">Admin Account Security</h2>
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm max-w-2xl">
+              <form onSubmit={updateAdminCredentials} className="space-y-6">
+                {securityUpdateMessage && (
+                  <div className="bg-green-50 text-green-700 p-4 rounded-xl text-sm font-bold border border-green-100">
+                    {securityUpdateMessage}
+                  </div>
+                )}
+                {securityUpdateError && (
+                  <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm font-bold border border-red-100">
+                    {securityUpdateError}
+                  </div>
+                )}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">New Admin User ID (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={newAdminEmail} 
+                      onChange={e => setNewAdminEmail(e.target.value)}
+                      placeholder="Leave blank to keep current User ID"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">New Password (Optional)</label>
+                    <input 
+                      type="password" 
+                      value={newAdminPassword} 
+                      onChange={e => setNewAdminPassword(e.target.value)}
+                      placeholder="Leave blank to keep current password"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
+                  Update Credentials
+                </button>
+              </form>
+            </div>
           </div>
         )}
 
@@ -1156,6 +1944,16 @@ export default function AdminPanel() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
           <form onSubmit={addProduct} className="bg-white p-8 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
             <h2 className="text-2xl font-bold text-slate-900">Add New Product</h2>
+            
+            {actionMessage.text && (
+              <div className={`p-3 rounded-lg text-xs font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
             <input type="text" value={newProduct.title} onChange={e => setNewProduct({...newProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
             <textarea value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
             <input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
@@ -1168,13 +1966,14 @@ export default function AdminPanel() {
             <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
               {newProduct.imageUrl ? (
                 <div className="relative inline-block">
-                  <img src={newProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" />
+                  <img src={newProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
                   <button type="button" onClick={() => setNewProduct({...newProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <Upload className="mx-auto text-slate-400" size={24} />
-                  <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload product image'}</p>
+                  <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload main image'}</p>
                 </div>
               )}
               <input 
@@ -1184,6 +1983,46 @@ export default function AdminPanel() {
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 disabled={uploadingImage}
               />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-bold text-slate-700">Product Gallery</label>
+                <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1">
+                  <Upload size={12} />
+                  {uploadingGallery ? 'Uploading...' : 'Add Gallery Images'}
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, true)} disabled={uploadingGallery} />
+                </label>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-3">
+                {newProduct.galleryImages?.map((url: string, idx: number) => (
+                  <div key={idx} className="relative group aspect-square">
+                    <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${newProduct.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
+                      <button 
+                        type="button"
+                        onClick={() => setAsPrimary(url, true)}
+                        className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
+                      >
+                        Primary
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => removeFormGalleryImage(url, true)}
+                        className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {(!newProduct.galleryImages || newProduct.galleryImages.length === 0) && !uploadingGallery && (
+                  <div className="col-span-4 py-4 text-center border border-dashed border-slate-200 rounded-lg text-xs text-slate-400">
+                    No gallery images added yet.
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4 pt-4">
@@ -1198,6 +2037,16 @@ export default function AdminPanel() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
           <form onSubmit={updateProduct} className="bg-white p-8 rounded-2xl w-full max-w-lg space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-slate-900">Edit Product</h2>
+
+            {actionMessage.text && (
+              <div className={`p-3 rounded-lg text-xs font-bold border ${
+                actionMessage.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' :
+                actionMessage.type === 'success' ? 'bg-green-50 text-green-700 border-green-100' :
+                'bg-blue-50 text-blue-700 border-blue-100'
+              }`}>
+                {actionMessage.text}
+              </div>
+            )}
             <input type="text" value={editingProduct.title} onChange={e => setEditingProduct({...editingProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
             <textarea value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
             <input type="number" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
@@ -1210,8 +2059,9 @@ export default function AdminPanel() {
             <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
               {editingProduct.imageUrl ? (
                 <div className="relative inline-block">
-                  <img src={editingProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" />
+                  <img src={editingProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
                   <button type="button" onClick={() => setEditingProduct({...editingProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1226,6 +2076,46 @@ export default function AdminPanel() {
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 disabled={uploadingImage}
               />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-bold text-slate-700">Product Gallery</label>
+                <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1">
+                  <Upload size={12} />
+                  {uploadingGallery ? 'Uploading...' : 'Add Gallery Images'}
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, false)} disabled={uploadingGallery} />
+                </label>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-3">
+                {editingProduct.galleryImages?.map((url: string, idx: number) => (
+                  <div key={idx} className="relative group aspect-square">
+                    <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${editingProduct.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
+                      <button 
+                        type="button"
+                        onClick={() => setAsPrimary(url, false)}
+                        className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
+                      >
+                        Primary
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => removeFormGalleryImage(url, false)}
+                        className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {(!editingProduct.galleryImages || editingProduct.galleryImages.length === 0) && !uploadingGallery && (
+                  <div className="col-span-4 py-4 text-center border border-dashed border-slate-200 rounded-lg text-xs text-slate-400">
+                    No gallery images added yet.
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4 pt-4">
@@ -1257,6 +2147,22 @@ export default function AdminPanel() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Total Price (₹)</label>
                 <input type="number" value={editingOrder.totalPrice || 0} onChange={e => setEditingOrder({...editingOrder, totalPrice: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Order Status</label>
+                <select 
+                  value={editingOrder.status || 'Pending'} 
+                  onChange={e => setEditingOrder({...editingOrder, status: e.target.value})}
+                  className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-bold"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Printing">Printing</option>
+                  <option value="Ready">Ready</option>
+                  <option value="Shipped">Shipped</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
               </div>
             </div>
             
@@ -1322,9 +2228,27 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tracking Number / Courier ID</label>
-              <input type="text" value={editingOrder.trackingNumber || ''} onChange={e => setEditingOrder({...editingOrder, trackingNumber: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter tracking number if shipped" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tracking Number / Courier ID</label>
+                <input type="text" value={editingOrder.trackingNumber || ''} onChange={e => setEditingOrder({...editingOrder, trackingNumber: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter tracking number if shipped" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Courier Service</label>
+                <select 
+                  value={editingOrder.courier || 'Delhivery'} 
+                  onChange={e => setEditingOrder({...editingOrder, courier: e.target.value})}
+                  className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                >
+                  <option value="Delhivery">Delhivery</option>
+                  <option value="BlueDart">BlueDart</option>
+                  <option value="Ecom Express">Ecom Express</option>
+                  <option value="XpressBees">XpressBees</option>
+                  <option value="Shadowfax">Shadowfax</option>
+                  <option value="India Post">India Post</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -1387,6 +2311,8 @@ export default function AdminPanel() {
                   <p><strong className="text-slate-700">Phone:</strong> <span className="text-slate-600">{viewingOrder.customerPhone || 'N/A'}</span></p>
                   <p><strong className="text-slate-700">Address:</strong> <span className="text-slate-600">{viewingOrder.deliveryAddress || 'N/A'}</span></p>
                   <p><strong className="text-slate-700">Delivery:</strong> <span className="text-slate-600">{viewingOrder.deliveryMethod || 'Home Delivery'}</span></p>
+                  <p><strong className="text-slate-700">Shipping:</strong> <span className="text-slate-600 font-bold">{viewingOrder.shippingMethod || 'Standard'} (₹{viewingOrder.shippingCost || 0})</span></p>
+                  <p><strong className="text-slate-700">Courier:</strong> <span className="text-slate-600">{viewingOrder.courier || 'Delhivery'}</span></p>
                   <p><strong className="text-slate-700">Tracking:</strong> <span className="text-blue-600 font-bold">{viewingOrder.trackingNumber || 'Not Shipped'}</span></p>
                   <p><strong className="text-slate-700">Payment Status:</strong> <span className={`font-bold ${viewingOrder.paymentStatus?.includes('Pending') ? 'text-amber-600' : 'text-green-600'}`}>{viewingOrder.paymentStatus || 'Paid'}</span></p>
                   <p><strong className="text-slate-700">Payment Method:</strong> <span className="text-slate-600 uppercase text-xs font-bold">{viewingOrder.paymentMethod || 'Online'}</span></p>

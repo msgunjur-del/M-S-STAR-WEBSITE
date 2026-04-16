@@ -64,28 +64,47 @@ export default function PhotosPage() {
         setIsUploading(true);
         setUploadProgress(0);
 
+        // Safety Timeout: If stuck at 0% for 4 seconds, use local fallback
+        const timeoutId = setTimeout(() => {
+          console.warn("Upload stuck at 0%, using local fallback");
+          uploadTask.cancel();
+          const localUrl = URL.createObjectURL(file);
+          setUploadedUrl(localUrl);
+          setIsUploading(false);
+          setUploadProgress(100);
+        }, 4000);
+
         uploadTask.on('state_changed',
           (snapshot) => {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
             setUploadProgress(progress);
+            if (progress > 0) {
+              clearTimeout(timeoutId);
+            }
           },
-          (error) => {
-            console.error("Upload error, using local fallback:", error);
-            // Turbo Fallback: If cloud upload fails, use local URL so user can proceed
+          (error: any) => {
+            clearTimeout(timeoutId);
+            if (error.code === 'storage/canceled') {
+              console.warn("Upload canceled by timeout, using local fallback");
+            } else {
+              console.error("Upload error, using local fallback:", error);
+            }
             const localUrl = URL.createObjectURL(file);
             setUploadedUrl(localUrl);
-            setUploadProgress(100);
             setIsUploading(false);
+            setUploadProgress(100);
           },
           async () => {
+            clearTimeout(timeoutId);
             const url = await getDownloadURL(uploadTask.snapshot.ref);
             setUploadedUrl(url);
             setIsUploading(false);
+            setUploadProgress(100);
           }
         );
       } catch (error) {
-        console.error("Compression/Upload error:", error);
-        setUploadedUrl(URL.createObjectURL(file));
+        console.error("Compression error:", error);
+        setUploadError(true);
         setIsUploading(false);
       }
     }
@@ -412,6 +431,63 @@ export default function PhotosPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Sample Photos & Guidelines */}
+      <div className="bg-white p-8 lg:p-12 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-10">
+        <div className="text-center space-y-4">
+          <h2 className="text-3xl font-black font-headline tracking-tight text-ink">Sample Photos & Guidelines</h2>
+          <p className="text-slate-500 font-medium max-w-2xl mx-auto">
+            Check out our sample passport and stamp size photos. Please follow the photo guidelines to ensure the best quality print.
+          </p>
+        </div>
+        
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="space-y-4">
+            <h3 className="font-black text-lg text-ink">Passport Size</h3>
+            <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm aspect-[3.5/4.5] relative group">
+              <img 
+                src="/images/sample-girl.png" 
+                alt="Sample Passport Photo" 
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="font-black text-lg text-ink">Stamp Size</h3>
+            <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm aspect-[2/2.5] relative group max-w-[150px] mx-auto">
+              <img 
+                src="/images/sample-boy.png" 
+                alt="Sample Stamp Photo" 
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="font-black text-lg text-ink">6+4 Combo</h3>
+            <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm aspect-[4/3] relative group">
+              <img 
+                src="/images/sample-6-4.png" 
+                alt="Sample Combo Photo" 
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="font-black text-lg text-ink">8 Photo Set</h3>
+            <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm aspect-[4/3] relative group">
+              <img 
+                src="/images/sample-8-set.png" 
+                alt="Sample 8 Photo Set" 
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                referrerPolicy="no-referrer"
+              />
+            </div>
           </div>
         </div>
       </div>

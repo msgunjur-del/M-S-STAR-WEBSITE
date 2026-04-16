@@ -18,7 +18,7 @@ export default function RefundCancellationPage() {
           <p className="text-slate-400 text-lg font-medium max-w-2xl mx-auto">
             Transparency and trust for every custom print at msstar.in
           </p>
-          <p className="text-slate-500 text-sm font-medium">Last updated: April 13, 2026</p>
+          <p className="text-slate-500 text-sm font-medium">Last updated: April 16, 2026</p>
         </div>
       </div>
 
@@ -56,7 +56,7 @@ export default function RefundCancellationPage() {
         <div className="space-y-8">
           <div className="bg-white rounded-[3rem] p-8 lg:p-12 shadow-xl shadow-slate-200/50 border border-slate-100">
             <p className="text-slate-600 font-medium leading-relaxed text-center max-w-3xl mx-auto mb-12">
-              At M S Star Xerox and Stationery (msstar.in), we strive to provide high-quality professional printing 
+              At M S STAR XEROX (msstar.in), we strive to provide high-quality professional printing 
               and document services. Because our products are custom-made and involve sensitive data processing, 
               our policy is strictly defined below:
             </p>
@@ -159,8 +159,26 @@ export default function RefundCancellationPage() {
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold italic">
-                  *Approved refunds are credited to the original source within 5-7 working days.
+                  *Approved refunds are credited to the original source (Paytm PG / Bank Account) within 5-7 working days.
                 </p>
+              </section>
+
+              <section className="bg-blue-50 p-8 rounded-[2rem] border border-blue-100 space-y-6 md:col-span-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-500/10 text-blue-600 rounded-xl flex items-center justify-center">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <h2 className="text-xl font-black text-ink">Payment Gateway (Paytm PG) Policy</h2>
+                </div>
+                <div className="space-y-4 text-slate-600 font-medium text-sm">
+                  <p>For all online payments processed via <strong>Paytm Payment Gateway</strong>:</p>
+                  <ul className="list-disc ml-5 space-y-2">
+                    <li>Refunds for failed transactions or double-deductions are automatically initiated by Paytm and credited back to your original payment mode (UPI, Card, or Wallet).</li>
+                    <li>In case of order cancellation (within the 1-hour window), the refund will be processed through the Paytm PG dashboard.</li>
+                    <li>Please note that convenience fees or taxes charged by the payment gateway at the time of transaction are non-refundable as per gateway terms.</li>
+                    <li>For any payment-related disputes, please provide the <strong>Paytm Transaction ID</strong> found in your order confirmation.</li>
+                  </ul>
+                </div>
               </section>
             </div>
           </div>

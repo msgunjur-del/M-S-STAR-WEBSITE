@@ -152,9 +152,27 @@ export default function OrderSuccessPage() {
                 <p className="font-black text-slate-900">₹{item.price * item.quantity}</p>
               </div>
             ))}
-            <div className="pt-4 flex justify-between items-center border-t border-slate-100">
-              <span className="font-bold text-slate-500">{order.paymentMethod === 'cash' ? 'Amount to Pay' : 'Total Paid'}</span>
-              <span className="text-2xl font-black text-blue-600">₹{order.totalPrice}</span>
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+              <div className="flex justify-between text-sm font-bold text-slate-500">
+                <span>Subtotal</span>
+                <span className="text-slate-900">₹{order.subtotal || (order.totalPrice - (order.shippingCost || 0) + (order.discount || 0))}</span>
+              </div>
+              {order.discount > 0 && (
+                <div className="flex justify-between text-sm font-bold text-green-600">
+                  <span>Discount</span>
+                  <span>-₹{order.discount}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold text-slate-500">
+                <span>Shipping ({order.shippingMethod || 'Standard'})</span>
+                <span className={order.shippingCost === 0 ? "text-green-600" : "text-slate-900"}>
+                  {order.shippingCost === 0 ? 'Free' : `₹${order.shippingCost}`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="font-bold text-slate-500">{order.paymentMethod === 'cash' ? 'Amount to Pay' : 'Total Paid'}</span>
+                <span className="text-2xl font-black text-blue-600">₹{order.totalPrice}</span>
+              </div>
             </div>
             {order.paymentMethod === 'cash' && (
               <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl mt-4">

@@ -31,7 +31,7 @@ export default function QualityTermsPage() {
           </div>
           
           <p className="text-lg text-slate-700 leading-relaxed mb-12">
-            At <strong className="text-slate-900">MS Star Xerox and Stationery</strong>, quality is our signature. 
+            At <strong className="text-slate-900">M S STAR XEROX</strong>, quality is our signature. 
             We utilize state-of-the-art printing technology and premium materials to ensure that every product we 
             deliver—from government IDs to industrial prints—meets the highest professional benchmarks.
           </p>

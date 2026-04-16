@@ -11,7 +11,7 @@ const faqCategories = [
         q: "What types of PVC cards do you offer?",
         a: (
           <div className="space-y-2">
-            <p>At <strong>M S Star</strong>, we provide high-quality printing for a variety of needs:</p>
+            <p>At <strong>M S STAR XEROX</strong>, we provide high-quality printing for a variety of needs:</p>
             <ul className="list-disc ml-5 space-y-1">
               <li>Driving License & PAN Card PVC Prints</li>
               <li>RC Book Smart Cards</li>
@@ -119,7 +119,7 @@ const faqCategories = [
         a: "Because each card is custom-printed with your specific data, we cannot accept returns or cancellations once the printing process has begun. Please double-check your uploaded files for clarity before finalizing the order."
       },
       {
-        q: "How can I reach M S Star?",
+        q: "How can I reach M S STAR XEROX?",
         a: (
           <div className="space-y-2">
             <p>We are located in Gunjur, Bangalore, and are ready to help:</p>
@@ -139,32 +139,38 @@ interface FaqItemProps {
   key?: React.Key;
   q: string;
   a: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
 }
 
-function FaqItem({ q, a }: FaqItemProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
+function FaqItem({ q, a, isOpen, onToggle }: FaqItemProps) {
   return (
-    <div className="border border-slate-100 rounded-2xl bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <div className={`border rounded-2xl bg-white overflow-hidden transition-all duration-300 ${isOpen ? 'border-accent-blue shadow-lg shadow-blue-50' : 'border-slate-100 shadow-sm hover:shadow-md'}`}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={onToggle}
         className="w-full text-left px-6 py-5 flex items-center justify-between gap-4 focus:outline-none"
       >
-        <span className="font-black text-ink text-lg">{q}</span>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${isOpen ? 'bg-accent-blue text-white' : 'bg-slate-50 text-slate-400'}`}>
-          <ChevronDown size={18} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <span className={`font-black text-lg transition-colors duration-300 ${isOpen ? 'text-accent-blue' : 'text-ink'}`}>{q}</span>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${isOpen ? 'bg-accent-blue text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}>
+          <ChevronDown size={18} />
         </div>
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
+            transition={{ duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }}
           >
             <div className="px-6 pb-6 text-slate-600 font-medium leading-relaxed border-t border-slate-50 mt-2 pt-4">
-              {a}
+              <motion.div
+                initial={{ y: -10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+              >
+                {a}
+              </motion.div>
             </div>
           </motion.div>
         )}
@@ -174,6 +180,12 @@ function FaqItem({ q, a }: FaqItemProps) {
 }
 
 export default function FaqPage() {
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const toggleFaq = (id: string) => {
+    setActiveId(activeId === id ? null : id);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Hero Section */}
@@ -188,7 +200,7 @@ export default function FaqPage() {
             Frequently Asked Questions
           </h1>
           <p className="text-slate-400 text-lg font-medium max-w-2xl mx-auto leading-relaxed">
-            Welcome to the <strong>msstar.in</strong> help center. Below are common questions regarding our PVC card printing, custom stationery, and document services. We update this page regularly to ensure you have the most accurate information for your orders in Gunjur and beyond.
+            Welcome to the <strong>M S STAR XEROX</strong> help center. Below are common questions regarding our PVC card printing, custom stationery, and document services. We update this page regularly to ensure you have the most accurate information for your orders in Gunjur and beyond.
           </p>
         </div>
       </div>
@@ -197,8 +209,8 @@ export default function FaqPage() {
       <div className="max-w-4xl mx-auto px-6 -mt-12 relative z-20 pb-24">
         <div className="bg-white rounded-[3rem] p-8 lg:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 space-y-12">
           
-          {faqCategories.map((category, idx) => (
-            <div key={idx} className="space-y-6">
+          {faqCategories.map((category, catIdx) => (
+            <div key={catIdx} className="space-y-6">
               <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                 <div className="w-10 h-10 bg-accent-blue/10 text-accent-blue rounded-xl flex items-center justify-center">
                   {category.icon}
@@ -207,9 +219,18 @@ export default function FaqPage() {
               </div>
               
               <div className="space-y-4">
-                {category.items.map((item, itemIdx) => (
-                  <FaqItem key={itemIdx} q={item.q} a={item.a} />
-                ))}
+                {category.items.map((item, itemIdx) => {
+                  const id = `${catIdx}-${itemIdx}`;
+                  return (
+                    <FaqItem 
+                      key={itemIdx} 
+                      q={item.q} 
+                      a={item.a} 
+                      isOpen={activeId === id}
+                      onToggle={() => toggleFaq(id)}
+                    />
+                  );
+                })}
               </div>
             </div>
           ))}

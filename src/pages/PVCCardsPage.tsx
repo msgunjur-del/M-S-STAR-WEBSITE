@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBasket, ShieldAlert, Zap, ArrowRight } from 'lucide-react';
+import { ShoppingBasket, ShieldAlert, Zap, ArrowRight, Image as ImageIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import ProductCard from '../components/ProductCard';
 import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
 const FALLBACK_PVC_CARDS = [
-  { id: 'pvc-1', title: 'Aadhar PVC Card Printing', description: 'High-quality Aadhar card printing on durable PVC material.', price: 99, category: 'PVC CARDS', imageUrl: 'https://picsum.photos/seed/aadhar/400/300' },
-  { id: 'pvc-2', title: 'PAN Card PVC Printing', description: 'Get your PAN card printed on a premium PVC card.', price: 99, category: 'PVC CARDS', imageUrl: 'https://picsum.photos/seed/pan/400/300' },
-  { id: 'pvc-3', title: 'Voter ID PVC Card', description: 'Durable and waterproof Voter ID PVC card printing.', price: 99, category: 'PVC CARDS', imageUrl: 'https://picsum.photos/seed/voter/400/300' },
-  { id: 'pvc-4', title: 'Custom ID Card', description: 'Custom ID cards for schools, colleges, and corporate offices.', price: 149, category: 'PVC CARDS', imageUrl: 'https://picsum.photos/seed/idcard/400/300' }
+  { id: 'pvc-1', title: 'Aadhar PVC Card Printing', description: 'High-quality Aadhar card printing on durable PVC material.', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1633265486064-086b219458ce?w=800&q=80' },
+  { id: 'pvc-2', title: 'PAN Card PVC Printing', description: 'Get your PAN card printed on a premium PVC card.', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80' },
+  { id: 'pvc-3', title: 'Voter ID PVC Card', description: 'Durable and waterproof Voter ID PVC card printing.', price: 99, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80' },
+  { id: 'pvc-4', title: 'Custom ID Card', description: 'Custom ID cards for schools, colleges, and corporate offices.', price: 149, category: 'PVC CARDS', imageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=80' }
 ];
 
 export default function PVCCardsPage() {
@@ -94,6 +94,39 @@ export default function PVCCardsPage() {
           <p className="text-slate-400 font-black text-xl">No PVC cards available at the moment.</p>
         </div>
       )}
+      {/* Sample Cards Gallery */}
+      <div className="bg-white p-8 lg:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-accent-blue/10 text-accent-blue rounded-2xl flex items-center justify-center">
+            <ImageIcon size={24} />
+          </div>
+          <h2 className="text-3xl font-black font-headline tracking-tight text-ink">Sample PVC Cards</h2>
+        </div>
+        
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {[
+            { title: 'Aadhar Card', img: 'https://images.unsplash.com/photo-1633265486064-086b219458ce?w=400&q=80' },
+            { title: 'PAN Card', img: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=400&q=80' },
+            { title: 'Voter ID', img: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=400&q=80' },
+            { title: 'Smart ID Card', img: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&q=80' }
+          ].map((sample, idx) => (
+            <div key={idx} className="space-y-4">
+              <h3 className="font-black text-lg text-ink">{sample.title}</h3>
+              <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm group">
+                <img 
+                  src={sample.img} 
+                  alt={sample.title} 
+                  className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-slate-400 font-bold text-sm italic">
+          * These are sample representations of our high-quality PVC printing.
+        </p>
+      </div>
     </div>
   );
 }

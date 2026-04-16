@@ -30,7 +30,7 @@ export default function TermsConditionsPage() {
             <div className="bg-accent-blue/5 border border-accent-blue/10 p-6 rounded-2xl flex gap-4 items-start">
               <Shield className="text-accent-blue shrink-0 mt-1" size={24} />
               <p className="text-sm font-bold text-slate-700 leading-relaxed m-0">
-                Welcome to MS STAR. By accessing our website (msstar.in) and using our professional printing services, 
+                Welcome to M S STAR XEROX. By accessing our website (msstar.in) and using our professional printing services, 
                 you agree to be bound by the following terms and conditions. Please read them carefully before placing an order.
               </p>
             </div>
@@ -94,7 +94,7 @@ export default function TermsConditionsPage() {
                 Limitation of Liability
               </h2>
               <p className="text-slate-600 font-medium ml-11 leading-relaxed">
-                MS STAR shall not be liable for any indirect, incidental, or consequential damages resulting from 
+                M S STAR XEROX shall not be liable for any indirect, incidental, or consequential damages resulting from 
                 the use or inability to use our services, including delays in shipping or delivery. Our maximum liability 
                 for any order is strictly limited to the total amount paid by the customer for that specific order.
               </p>

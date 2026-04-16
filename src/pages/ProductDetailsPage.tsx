@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { db, storage } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { db, storage, auth } from '../firebase';
+import { doc, getDoc, collection, query, where, limit, getDocs, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, orderBy, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useCart } from '../context/CartContext';
 import imageCompression from 'browser-image-compression';
 import * as pdfjs from 'pdfjs-dist';
+import ProductCard from '../components/ProductCard';
 import { 
   ChevronRight, Upload, Eye, EyeOff, Plus, 
   ShoppingBag, CheckCircle2, Info, ShoppingBasket,
-  ShieldAlert, Zap, ArrowRight, Loader2, X, Check
+  ShieldAlert, Zap, ArrowRight, Loader2, X, Check,
+  Heart, Star, MessageSquare, User,
+  ShieldCheck, Cpu, Printer, Layers, Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -32,13 +36,26 @@ export default function ProductDetailsPage() {
   const navigate = useNavigate();
   const { addToCart, setIsCartOpen } = useCart();
   const [product, setProduct] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'description' | 'features'>('description');
+  const [activeTab, setActiveTab] = useState<'description' | 'features' | 'reviews'>('description');
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [isInWishlist, setIsInWishlist] = useState(false);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+
+  // Reviews State
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [isEligibleToReview, setIsEligibleToReview] = useState(false);
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   const generateThumbnail = async (file: File): Promise<string | undefined> => {
     if (file.type.startsWith('image/')) {
@@ -128,18 +145,17 @@ export default function ProductDetailsPage() {
       // Set status to uploading immediately
       setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'uploading', progress: 0 } : f));
 
-      // Safety Timeout: If stuck at 0% for 5 seconds, use local fallback
+      // Safety Timeout: If stuck at 0% for 10 seconds, mark as error
       const timeoutId = setTimeout(() => {
         setFiles(prev => {
           const current = prev.find(f => f.id === fileObj.id);
           if (current && current.status === 'uploading' && (current.progress || 0) === 0) {
-            console.warn("Upload stuck at 0%, using local fallback");
-            const localUrl = URL.createObjectURL(fileObj.file);
-            return prev.map(f => f.id === fileObj.id ? { ...f, url: localUrl, status: 'done', progress: 100 } : f);
+            console.error("Upload timed out");
+            return prev.map(f => f.id === fileObj.id ? { ...f, status: 'error' } : f);
           }
           return prev;
         });
-      }, 5000);
+      }, 10000);
 
       uploadTask.on('state_changed',
         (snapshot) => {
@@ -148,9 +164,8 @@ export default function ProductDetailsPage() {
         },
         (error) => {
           clearTimeout(timeoutId);
-          console.error("Upload error, using local fallback:", error);
-          const localUrl = URL.createObjectURL(fileObj.file);
-          setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, url: localUrl, status: 'done', progress: 100 } : f));
+          console.error("Upload error:", error);
+          setFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, status: 'error' } : f));
         },
         async () => {
           clearTimeout(timeoutId);
@@ -220,27 +235,55 @@ export default function ProductDetailsPage() {
       if (!id) return;
       
       const fallbacks: any = {
-        'pvc-1': { title: 'Aadhar PVC Card Printing', price: 99, category: 'PVC CARDS', description: 'High-quality Aadhar card printing on durable PVC material.', imageUrl: 'https://picsum.photos/seed/aadhar/800/600' },
-        'pvc-2': { title: 'PAN Card PVC Printing', price: 99, category: 'PVC CARDS', description: 'Get your PAN card printed on a premium PVC card.', imageUrl: 'https://picsum.photos/seed/pan/800/600' },
-        'pvc-3': { title: 'Voter ID PVC Card', price: 99, category: 'PVC CARDS', description: 'Durable and waterproof Voter ID PVC card printing.', imageUrl: 'https://picsum.photos/seed/voter/800/600' },
-        'pvc-4': { title: 'Custom ID Card', price: 149, category: 'PVC CARDS', description: 'Custom ID cards for schools, colleges, and corporate offices.', imageUrl: 'https://picsum.photos/seed/idcard/800/600' },
-        'pvc-5': { title: 'PVC Smart ID Card', price: 75, category: 'PVC CARDS', description: 'Custom institutional or corporate employee IDs with HD print.', imageUrl: 'https://picsum.photos/seed/idcard2/800/600' },
-        'photo-1': { title: 'Passport Size Photo (Set of 8)', price: 40, category: 'PHOTOS', description: 'Premium quality studio finish passport photos for all official uses.', imageUrl: 'https://picsum.photos/seed/photo1/800/600' },
-        'photo-2': { title: '4x6 Photo Print', price: 15, category: 'PHOTOS', description: 'High-gloss 4x6 inch photographic memories for your albums.', imageUrl: 'https://picsum.photos/seed/photo2/800/600' },
-        'photo-3': { title: 'Stamp Size Photo (Set of 16)', price: 30, category: 'PHOTOS', description: 'Set of 16 precision-cut stamp size photos for admission forms.', imageUrl: 'https://picsum.photos/seed/photo3/800/600' }
+        'pvc-1': { title: 'Aadhar PVC Card Printing', price: 99, category: 'PVC CARDS', description: 'High-quality Aadhar card printing on durable PVC material.', imageUrl: 'https://images.unsplash.com/photo-1633265486064-086b219458ce?w=800&q=80' },
+        'pvc-2': { title: 'PAN Card PVC Printing', price: 99, category: 'PVC CARDS', description: 'Get your PAN card printed on a premium PVC card.', imageUrl: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800&q=80' },
+        'pvc-3': { title: 'Voter ID PVC Card', price: 99, category: 'PVC CARDS', description: 'Durable and waterproof Voter ID PVC card printing.', imageUrl: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80' },
+        'pvc-4': { title: 'Custom ID Card', price: 149, category: 'PVC CARDS', description: 'Custom ID cards for schools, colleges, and corporate offices.', imageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=80' },
+        'pvc-5': { title: 'PVC Smart ID Card', price: 75, category: 'PVC CARDS', description: 'Custom institutional or corporate employee IDs with HD print.', imageUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=80' },
+        'photo-1': { title: 'Passport Size Photo (Set of 8)', price: 40, category: 'PHOTOS', description: 'Premium quality studio finish passport photos for all official uses.', imageUrl: '/images/sample-girl.png' },
+        'photo-2': { title: '4x6 Photo Print', price: 15, category: 'PHOTOS', description: 'High-gloss 4x6 inch photographic memories for your albums.', imageUrl: '/images/sample-boy.png' },
+        'photo-3': { title: 'Stamp Size Photo (Set of 16)', price: 30, category: 'PHOTOS', description: 'Set of 16 precision-cut stamp size photos for admission forms.', imageUrl: '/images/sample-6-4.png' }
       };
 
       try {
         const docRef = doc(db, 'products', id);
         const docSnap = await getDoc(docRef);
+        let currentProductData = null;
+
         if (docSnap.exists()) {
-          const data = { id: docSnap.id, ...docSnap.data() } as any;
-          setProduct(data);
-          setSelectedImage(data.imageUrl || '');
+          currentProductData = { id: docSnap.id, ...docSnap.data() } as any;
+          setProduct(currentProductData);
+          setSelectedImage(currentProductData.imageUrl || '');
         } else {
           if (fallbacks[id]) {
-            setProduct(fallbacks[id]);
-            setSelectedImage(fallbacks[id].imageUrl);
+            currentProductData = { id, ...fallbacks[id] };
+            setProduct(currentProductData);
+            setSelectedImage(currentProductData.imageUrl);
+          }
+        }
+
+        // Fetch related products
+        if (currentProductData) {
+          const q = query(
+            collection(db, 'products'),
+            where('category', '==', currentProductData.category),
+            limit(5)
+          );
+          const querySnapshot = await getDocs(q);
+          const related = querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(p => p.id !== id)
+            .slice(0, 4);
+          
+          if (related.length > 0) {
+            setRelatedProducts(related);
+          } else {
+            // If no related products in DB, use fallbacks from same category
+            const categoryFallbacks = Object.entries(fallbacks)
+              .filter(([fid, f]: [string, any]) => f.category === currentProductData.category && fid !== id)
+              .map(([fid, f]: [string, any]) => ({ id: fid, ...f }))
+              .slice(0, 4);
+            setRelatedProducts(categoryFallbacks);
           }
         }
       } catch (error) {
@@ -252,7 +295,142 @@ export default function ProductDetailsPage() {
       }
     };
     fetchProduct();
+    fetchReviews();
   }, [id]);
+
+  const fetchReviews = async () => {
+    if (!id) return;
+    setReviewsLoading(true);
+    try {
+      const q = query(
+        collection(db, 'reviews'),
+        where('productId', '==', id),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const fetchedReviews = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setReviews(fetchedReviews);
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const checkReviewEligibility = async (uid: string) => {
+    if (!id) return;
+    try {
+      const q = query(
+        collection(db, 'orders'),
+        where('userId', '==', uid),
+        where('status', '==', 'Delivered')
+      );
+      const querySnapshot = await getDocs(q);
+      
+      // Check if any delivered order contains this product
+      const hasPurchased = querySnapshot.docs.some(doc => {
+        const orderData = doc.data();
+        return orderData.items?.some((item: any) => item.id === id || item.productId === id);
+      });
+
+      // Also check if user already reviewed
+      const reviewQuery = query(
+        collection(db, 'reviews'),
+        where('productId', '==', id),
+        where('userId', '==', uid)
+      );
+      const reviewSnapshot = await getDocs(reviewQuery);
+      
+      setIsEligibleToReview(hasPurchased && reviewSnapshot.empty);
+    } catch (error) {
+      console.error("Error checking review eligibility:", error);
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !id) return;
+    if (reviewComment.trim().length < 5) {
+      alert("Please write a more detailed review (at least 5 characters).");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    try {
+      await addDoc(collection(db, 'reviews'), {
+        productId: id,
+        userId: user.uid,
+        userName: user.displayName || 'Anonymous User',
+        userPhoto: user.photoURL || '',
+        rating: reviewRating,
+        comment: reviewComment,
+        createdAt: serverTimestamp()
+      });
+
+      setReviewComment('');
+      setReviewRating(5);
+      setIsReviewFormOpen(false);
+      setIsEligibleToReview(false);
+      fetchReviews();
+      alert("Thank you for your review!");
+    } catch (error) {
+      console.error("Error submitting review:", error);
+      alert("Failed to submit review. Please try again.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser && id) {
+        checkWishlistStatus(currentUser.uid, id);
+        checkReviewEligibility(currentUser.uid);
+      }
+    });
+    return () => unsubscribe();
+  }, [id]);
+
+  const checkWishlistStatus = async (uid: string, productId: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const wishlist = userDoc.data().wishlist || [];
+        setIsInWishlist(wishlist.includes(productId));
+      }
+    } catch (error) {
+      console.error("Error checking wishlist status:", error);
+    }
+  };
+
+  const toggleWishlist = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setIsWishlistLoading(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      if (isInWishlist) {
+        await setDoc(userRef, {
+          wishlist: arrayRemove(id)
+        }, { merge: true });
+        setIsInWishlist(false);
+      } else {
+        await setDoc(userRef, {
+          wishlist: arrayUnion(id)
+        }, { merge: true });
+        setIsInWishlist(true);
+      }
+    } catch (error) {
+      console.error("Error toggling wishlist:", error);
+      alert("Failed to update wishlist. Please try again.");
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  };
 
   if (!product) {
     return (
@@ -262,7 +440,7 @@ export default function ProductDetailsPage() {
     );
   }
 
-  const gallery = [product.imageUrl, ...(product.galleryImages || [])].filter(Boolean);
+  const gallery = Array.from(new Set([product.imageUrl, ...(product.galleryImages || [])])).filter(Boolean);
 
   return (
     <div className="min-h-screen bg-slate-50/30">
@@ -373,14 +551,19 @@ export default function ProductDetailsPage() {
 
             {/* Details Tabs */}
             <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
-              <div className="flex border-b border-slate-100 px-8">
-                {['description', 'features'].map((tab) => (
+              <div className="flex border-b border-slate-100 px-8 overflow-x-auto scrollbar-hide">
+                {['description', 'features', 'reviews'].map((tab) => (
                   <button 
                     key={tab}
                     onClick={() => setActiveTab(tab as any)}
-                    className={`px-8 py-6 font-black text-xs uppercase tracking-widest transition-all relative ${activeTab === tab ? 'text-accent-blue' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-8 py-6 font-black text-[10px] uppercase tracking-[0.2em] transition-all relative whitespace-nowrap ${activeTab === tab ? 'text-accent-blue' : 'text-slate-400 hover:text-slate-600'}`}
                   >
                     {tab}
+                    {tab === 'reviews' && reviews.length > 0 && (
+                      <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] transition-colors ${activeTab === tab ? 'bg-accent-blue/10 text-accent-blue' : 'bg-slate-100 text-slate-500'}`}>
+                        {reviews.length}
+                      </span>
+                    )}
                     {activeTab === tab && <motion.div layoutId="tab" className="absolute bottom-0 left-0 w-full h-1 bg-accent-blue rounded-t-full" />}
                   </button>
                 ))}
@@ -396,7 +579,7 @@ export default function ProductDetailsPage() {
                   >
                     {activeTab === 'description' ? (
                       <p className="text-lg text-slate-500 font-medium leading-relaxed">{product.description}</p>
-                    ) : (
+                    ) : activeTab === 'features' ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(product.features || "High-quality material\nWaterproof and durable\nStandard size\nHigh-resolution printing").split('\n').map((feature: string, i: number) => (
                           <div key={i} className="flex items-center gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
@@ -407,9 +590,234 @@ export default function ProductDetailsPage() {
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {/* Review Summary & Action */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-8 border-b border-slate-100">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-4">
+                              <h3 className="text-4xl font-black text-ink">
+                                {reviews.length > 0 
+                                  ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
+                                  : '0.0'}
+                              </h3>
+                              <div className="space-y-1">
+                                <div className="flex gap-1 text-accent-amber">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Zap 
+                                      key={star} 
+                                      size={16} 
+                                      fill={star <= (reviews.length > 0 ? Math.round(reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length) : 0) ? "currentColor" : "none"} 
+                                    />
+                                  ))}
+                                </div>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Based on {reviews.length} reviews</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isEligibleToReview && !isReviewFormOpen && (
+                            <button 
+                              onClick={() => setIsReviewFormOpen(true)}
+                              className="bg-accent-blue text-white px-8 py-4 rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center gap-2"
+                            >
+                              <Star size={18} />
+                              Write a Review
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Review Form */}
+                        <AnimatePresence>
+                          {isReviewFormOpen && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <form onSubmit={handleSubmitReview} className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 space-y-6">
+                                <div className="flex justify-between items-center">
+                                  <h4 className="text-xl font-black text-ink">Your Review</h4>
+                                  <button 
+                                    type="button"
+                                    onClick={() => setIsReviewFormOpen(false)}
+                                    className="text-slate-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <X size={20} />
+                                  </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rating</label>
+                                  <div className="flex gap-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setReviewRating(star)}
+                                        className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${reviewRating >= star ? 'bg-accent-amber text-white shadow-lg shadow-amber-100' : 'bg-white text-slate-300 border border-slate-100'}`}
+                                      >
+                                        <Zap size={24} fill={reviewRating >= star ? "currentColor" : "none"} />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Comment</label>
+                                  <textarea 
+                                    required
+                                    value={reviewComment}
+                                    onChange={(e) => setReviewComment(e.target.value)}
+                                    placeholder="Share your experience with this product..."
+                                    className="w-full p-5 bg-white border border-slate-200 rounded-2xl focus:border-accent-blue focus:ring-0 outline-none font-bold text-sm transition-all min-h-[120px]"
+                                  />
+                                </div>
+
+                                <button 
+                                  type="submit"
+                                  disabled={isSubmittingReview}
+                                  className="w-full bg-accent-blue text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                  {isSubmittingReview ? (
+                                    <Loader2 className="animate-spin" size={24} />
+                                  ) : (
+                                    <>
+                                      Submit Review
+                                      <ArrowRight size={20} />
+                                    </>
+                                  )}
+                                </button>
+                              </form>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Reviews List */}
+                        <div className="space-y-6">
+                          {reviewsLoading ? (
+                            <div className="flex justify-center py-12">
+                              <Loader2 className="animate-spin text-accent-blue" size={32} />
+                            </div>
+                          ) : reviews.length > 0 ? (
+                            reviews.map((review) => (
+                              <div key={review.id} className="bg-white p-6 rounded-3xl border border-slate-50 space-y-4">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-slate-100 rounded-2xl overflow-hidden flex items-center justify-center">
+                                      {review.userPhoto ? (
+                                        <img src={review.userPhoto} alt={review.userName} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <User className="text-slate-400" size={24} />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-ink">{review.userName}</p>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        {review.createdAt?.seconds 
+                                          ? new Date(review.createdAt.seconds * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                                          : 'Just now'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-0.5 text-accent-amber">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <Zap 
+                                        key={star} 
+                                        size={12} 
+                                        fill={star <= review.rating ? "currentColor" : "none"} 
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                <p className="text-slate-600 font-medium leading-relaxed">{review.comment}</p>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-12 space-y-4">
+                              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                                <MessageSquare className="text-slate-300" size={32} />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="font-black text-ink">No reviews yet</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Be the first to share your experience!</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </motion.div>
                 </AnimatePresence>
+              </div>
+
+              {/* Service Details Section */}
+              <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden p-10 space-y-10">
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 bg-accent-blue/5 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest text-accent-blue">
+                    <Info size={14} />
+                    <span>Service Details</span>
+                  </div>
+                  <h2 className="text-3xl font-black text-ink tracking-tight">Quality & Technical Specifications</h2>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    We combine industrial-grade technology with premium materials to ensure your prints meet professional standards.
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-accent-blue border border-slate-100 shadow-sm">
+                      <Layers size={24} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-ink">Material Standards</h3>
+                      <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                        {product.category === 'PVC CARDS' 
+                          ? 'CR80 standard high-density PVC for durable, waterproof smart cards with a premium finish.' 
+                          : '75-100 GSM high-whiteness premium paper stock for crisp, professional documents.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-accent-blue border border-slate-100 shadow-sm">
+                      <Cpu size={24} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-ink">Printing Technology</h3>
+                      <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                        {product.category === 'PHOTOS' || product.category === 'PVC CARDS'
+                          ? 'Epson High-Definition 6-color ink systems for vibrant, true-to-life color reproduction.'
+                          : 'Industrial-grade Canon iR series laser printing for precision and high-speed documentation.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-accent-blue border border-slate-100 shadow-sm">
+                      <ShieldCheck size={24} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-ink">Quality Assurance</h3>
+                      <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                        CMYK calibrated workflows for 95% color accuracy and manual 3-point inspection (Alignment, Color, Surface).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-accent-blue border border-slate-100 shadow-sm">
+                      <Shield size={24} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-ink">Data Privacy</h3>
+                      <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                        Strict data security measures with automatic file purging from our servers 24 hours after delivery.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -585,25 +993,46 @@ export default function ProductDetailsPage() {
                 </div>
                 
                 <div className="space-y-4">
-                  <motion.button 
-                    whileHover={{ scale: !(isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))) ? 1.02 : 1 }}
-                    whileTap={{ scale: !(isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))) ? 0.98 : 1 }}
-                    onClick={handleAddToCart}
-                    disabled={isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))}
-                    className="w-full bg-accent-blue text-white py-6 rounded-[2rem] font-black text-xl hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(59,130,246,0.3)] flex items-center justify-center gap-3 group disabled:opacity-50"
-                  >
-                    {isUploading || (files.length > 0 && files.some(f => f.status !== 'done')) ? (
-                      <div className="flex items-center gap-3">
-                        <Loader2 className="animate-spin" size={24} />
-                        <span>{files.some(f => f.status !== 'done') ? 'Uploading...' : 'Processing...'}</span>
-                      </div>
-                    ) : (
-                      <>
-                        Add to Cart
-                        <ArrowRight size={24} className="group-hover:translate-x-2 transition-transform" />
-                      </>
-                    )}
-                  </motion.button>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <motion.button 
+                      whileHover={{ scale: !(isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))) ? 1.02 : 1 }}
+                      whileTap={{ scale: !(isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))) ? 0.98 : 1 }}
+                      onClick={handleAddToCart}
+                      disabled={isUploading || (files.length > 0 && files.some(f => f.status !== 'done'))}
+                      className="flex-1 bg-accent-blue text-white py-6 rounded-[2rem] font-black text-xl hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(59,130,246,0.3)] flex items-center justify-center gap-3 group disabled:opacity-50"
+                    >
+                      {isUploading || (files.length > 0 && files.some(f => f.status !== 'done')) ? (
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="animate-spin" size={24} />
+                          <span>{files.some(f => f.status !== 'done') ? 'Uploading...' : 'Processing...'}</span>
+                        </div>
+                      ) : (
+                        <>
+                          Add to Cart
+                          <ArrowRight size={24} className="group-hover:translate-x-2 transition-transform" />
+                        </>
+                      )}
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={toggleWishlist}
+                      disabled={isWishlistLoading}
+                      className={`w-20 h-20 rounded-[2rem] flex items-center justify-center transition-all shadow-lg shrink-0 ${
+                        isInWishlist 
+                          ? 'bg-red-500 text-white shadow-red-200' 
+                          : 'bg-white border-2 border-slate-100 text-slate-300 hover:text-red-500 hover:border-red-100'
+                      }`}
+                      title={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+                    >
+                      {isWishlistLoading ? (
+                        <Loader2 size={24} className="animate-spin" />
+                      ) : (
+                        <Heart size={24} fill={isInWishlist ? "currentColor" : "none"} strokeWidth={isInWishlist ? 0 : 2.5} />
+                      )}
+                    </motion.button>
+                  </div>
 
                   <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-3">
                     <div className="flex items-center gap-3 text-ink">
@@ -633,6 +1062,44 @@ export default function ProductDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Related Products Section */}
+      {relatedProducts.length > 0 && (
+        <div className="max-w-7xl mx-auto px-6 pb-24">
+          <div className="flex items-center justify-between mb-12">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 text-accent-blue">
+                <ShoppingBag size={20} />
+                <span className="font-black text-xs uppercase tracking-widest">You might also like</span>
+              </div>
+              <h2 className="text-4xl font-black text-ink font-headline tracking-tighter">Related Products</h2>
+            </div>
+            <Link 
+              to={product.category === 'PVC CARDS' ? '/pvc-cards' : '/'} 
+              className="group flex items-center gap-3 bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all"
+            >
+              <span className="font-black text-xs uppercase tracking-widest text-ink">View All</span>
+              <div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center group-hover:bg-accent-blue group-hover:text-white transition-all">
+                <ArrowRight size={16} />
+              </div>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {relatedProducts.map((p) => (
+              <ProductCard
+                key={p.id}
+                id={p.id}
+                title={p.title}
+                description={p.description}
+                price={p.price}
+                category={p.category}
+                imageUrl={p.imageUrl}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

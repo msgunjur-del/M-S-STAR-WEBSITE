@@ -22,9 +22,9 @@ export default function DisclaimerPage() {
       <div className="max-w-5xl mx-auto px-6 -mt-12">
         <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 border border-slate-100 space-y-12">
           <p className="text-slate-600 leading-relaxed text-lg italic border-l-4 border-red-500 pl-6">
-            This Disclaimer applies to the use of www.msstar.in, operated by MS Star Xerox and Stationery, 
-            having its registered and operational office at No 213/214, 1a, Near Gokul Circle, Gunjur, 
-            Bangalore 560087, Karnataka, India. By accessing this website, you acknowledge that you have 
+            This Disclaimer applies to the use of www.msstar.in, operated by M S STAR XEROX, 
+            having its registered and operational office at no 247 gunjur bangalore 560087, 
+            Karnataka, India. By accessing this website, you acknowledge that you have 
             read, understood, and agreed to this Disclaimer.
           </p>
 
@@ -35,7 +35,7 @@ export default function DisclaimerPage() {
                 1. No Government Affiliation
               </h2>
               <p className="text-slate-600 text-sm leading-relaxed">
-                MS Star Xerox and Stationery is a private professional document services hub. We are not affiliated, 
+                M S STAR XEROX is a private professional document services hub. We are not affiliated, 
                 associated, authorized, endorsed, or connected with any government authority. We do not issue, 
                 generate, or approve any government-issued documents. All printed products are created solely 
                 based on customer-submitted content as a printing service only.
@@ -62,7 +62,7 @@ export default function DisclaimerPage() {
               </h2>
               <p className="text-slate-600 text-sm leading-relaxed">
                 The customer is solely responsible for the content of files uploaded and the legality of the 
-                purpose for which the printed materials are used. MS Star Xerox and Stationery shall not be 
+                purpose for which the printed materials are used. M S STAR XEROX shall not be 
                 liable for any legal consequences arising from misuse or misrepresentation.
               </p>
             </section>
@@ -97,7 +97,7 @@ export default function DisclaimerPage() {
                 6. Limitation of Liability
               </h2>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Under no circumstances shall MS Star Xerox and Stationery be liable for indirect, incidental, 
+                Under no circumstances shall M S STAR XEROX be liable for indirect, incidental, 
                 or legal consequences arising from the customer's use of printed materials. Our maximum 
                 liability is limited strictly to the amount paid for the specific order.
               </p>
@@ -131,7 +131,7 @@ export default function DisclaimerPage() {
               </div>
               <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
                 <MapPin className="text-blue-600" size={20} />
-                <span className="text-slate-700 font-medium text-sm">No 213/214, 1a, Gunjur, Bangalore</span>
+                <span className="text-slate-700 font-medium text-sm">no 247 gunjur bangalore 560087</span>
               </div>
               <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
                 <Phone className="text-blue-600" size={20} />

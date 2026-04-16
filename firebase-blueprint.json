@@ -9,7 +9,8 @@
         "description": { "type": "string" },
         "price": { "type": "number" },
         "category": { "type": "string", "enum": ["PVC CARDS", "PHOTOS", "DOCUMENTS"] },
-        "imageUrl": { "type": "string" }
+        "imageUrl": { "type": "string" },
+        "galleryImages": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["title", "price", "category"]
     },
@@ -50,6 +51,21 @@
         "courierCharges": { "type": "number" },
         "pvcBasePrice": { "type": "number" }
       }
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A customer review for a product",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "userId", "rating", "comment", "createdAt"]
     }
   },
   "firestore": {
@@ -64,6 +80,10 @@
     "/settings/global": {
       "schema": "Settings",
       "description": "Global settings document"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Collection of product reviews"
     }
   }
 }

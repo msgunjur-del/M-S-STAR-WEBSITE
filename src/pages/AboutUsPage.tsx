@@ -13,7 +13,7 @@ export default function AboutUsPage() {
             <span>Our Story</span>
           </div>
           <h1 className="text-4xl lg:text-6xl font-black text-white font-headline tracking-tighter">
-            About M S Star
+            About M S STAR XEROX
           </h1>
           <p className="text-slate-400 text-lg font-medium max-w-2xl mx-auto leading-relaxed">
             We are on a mission to make professional printing accessible, affordable, and hassle-free for everyone. 
@@ -32,10 +32,10 @@ export default function AboutUsPage() {
               <div className="w-12 h-12 bg-accent-blue/10 text-accent-blue rounded-2xl flex items-center justify-center mb-6">
                 <Printer size={24} />
               </div>
-              <h2 className="text-3xl lg:text-4xl font-black text-ink tracking-tight">The M S Star Journey</h2>
+              <h2 className="text-3xl lg:text-4xl font-black text-ink tracking-tight">The M S STAR XEROX Journey</h2>
               <div className="space-y-4 text-slate-600 font-medium leading-relaxed">
                 <p>
-                  Located in the heart of Gunjur, Bangalore, <strong>M S Star Xerox and Stationery</strong> started with a simple observation: getting documents printed, obtaining PVC smart cards, or buying quality stationery was often a tedious process involving long queues and inconsistent quality.
+                  Located in the heart of Gunjur, Bangalore, <strong>M S STAR XEROX</strong> started with a simple observation: getting documents printed, obtaining PVC smart cards, or buying quality stationery was often a tedious process involving long queues and inconsistent quality.
                 </p>
                 <p>
                   We built a platform that bridges the gap between digital convenience and physical print quality. 
@@ -61,7 +61,7 @@ export default function AboutUsPage() {
           {/* Why Choose Us Section */}
           <section className="space-y-12 pt-12 border-t border-slate-100">
             <div className="text-center space-y-4 max-w-2xl mx-auto">
-              <h2 className="text-3xl lg:text-4xl font-black text-ink tracking-tight">Why Choose M S Star</h2>
+              <h2 className="text-3xl lg:text-4xl font-black text-ink tracking-tight">Why Choose M S STAR XEROX</h2>
               <p className="text-slate-500 font-medium">We combine state-of-the-art technology with a customer-first approach to deliver the best printing experience.</p>
             </div>
             

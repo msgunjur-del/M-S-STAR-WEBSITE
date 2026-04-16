@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, Upload, File, X, Plus, FileText, Image as ImageIcon, Loader2, ShoppingBasket, Zap, ArrowRight } from 'lucide-react';
+import { Check, Upload, File, X, Plus, FileText, Image as ImageIcon, Loader2, ShoppingBasket, Zap, ArrowRight, Lock, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { PDFDocument } from 'pdf-lib';
 import { storage, db } from '../firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -25,18 +25,24 @@ interface UploadedFile {
   progress?: number;
   url?: string;
   thumbnail?: string;
+  needsPassword?: boolean;
+  password?: string;
 }
 
 export default function DocumentPrintingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialCategory = searchParams.get('category') || 'DOCUMENTS';
+  
   const { addToCart, setIsCartOpen } = useCart();
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [category, setCategory] = useState(initialCategory);
   const [copies, setCopies] = useState(1);
-  const [colorMode, setColorMode] = useState('B&W');
+  const [colorMode, setColorMode] = useState(initialCategory === 'PHOTOS' ? 'Color' : 'B&W');
   const [printSide, setPrintSide] = useState('Single');
   const [binding, setBinding] = useState('None');
   const [settings, setSettings] = useState({
@@ -62,22 +68,30 @@ export default function DocumentPrintingPage() {
   }, []);
 
   const totalPages = files.reduce((sum, f) => sum + f.pages, 0);
-  const pricePerCopy = colorMode === 'B&W' 
-    ? (printSide === 'Single' ? settings.pricePerPrintBW : settings.pricePerPrintBW * 0.8) 
-    : settings.pricePerPrintColor;
+  
+  // Dynamic Price Calculation Logic
+  const getPricePerSide = () => {
+    if (colorMode === 'B&W') {
+      return printSide === 'Single' ? settings.pricePerPrintBW : (settings.pricePerPrintBW * 0.8333); // ₹3 -> ₹2.5
+    }
+    return settings.pricePerPrintColor;
+  };
+
+  const pricePerSide = getPricePerSide();
+  const printingTotal = totalPages * pricePerSide;
   const bindingCost = binding === 'Spiral' ? settings.spiralBindingCost : (binding === 'Stapled' ? settings.stapledBindingCost : 0);
-  const unitPrice = (pricePerCopy * totalPages) + bindingCost;
+  const unitPrice = printingTotal + bindingCost;
   const totalPrice = unitPrice * copies;
 
-  const processPdf = async (file: File, fileId: string) => {
+  const processPdf = async (file: File, fileId: string, password?: string) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer, password });
       const pdf = await loadingTask.promise;
       
-      // Update page count immediately
+      // Update page count immediately and clear needsPassword
       const pages = pdf.numPages;
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, pages } : f));
+      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, pages, needsPassword: false, password } : f));
 
       // Generate thumbnail
       const page = await pdf.getPage(1);
@@ -103,9 +117,13 @@ export default function DocumentPrintingPage() {
         errorMessage.toLowerCase().includes('no password given');
 
       if (isPasswordError) {
-        alert(`The file "${file.name}" is password protected. Please upload an unprotected file.`);
+        if (password) {
+          alert('Incorrect password. Please try again.');
+        }
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, needsPassword: true, pages: 0 } : f));
+      } else {
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, pages: 1 } : f));
       }
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, pages: 1 } : f));
     }
   };
 
@@ -233,33 +251,43 @@ export default function DocumentPrintingPage() {
     }
   };
 
-  const OptionButton = ({ label, active, onClick, disabled }: { label: string, active: boolean, onClick: () => void, disabled?: boolean }) => (
-    <button 
-      onClick={!disabled ? onClick : undefined} 
-      disabled={disabled}
-      className={`p-4 rounded-xl border-2 font-bold flex items-center justify-center gap-2 transition-all relative overflow-hidden ${
-        disabled
-          ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-          : active 
-            ? 'border-blue-600 bg-blue-50 text-blue-700' 
-            : 'border-slate-200 hover:border-slate-300'
-      }`}
-    >
-      <AnimatePresence mode="wait">
-        {active && (
-          <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          >
-            <Check size={18} strokeWidth={3} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {label}
-    </button>
-  );
+  const OptionButton = ({ label, active, onClick, disabled }: { label: string, active: boolean, onClick: () => void, disabled?: boolean, key?: React.Key }) => {
+    const upperLabel = label.toUpperCase();
+    const isPVC = upperLabel.includes('PVC');
+    const isPhoto = upperLabel.includes('PHOTO');
+    
+    const activeBorder = isPVC ? 'border-indigo-600' : isPhoto ? 'border-amber-600' : 'border-blue-600';
+    const activeBg = isPVC ? 'bg-indigo-50' : isPhoto ? 'bg-amber-50' : 'bg-blue-50';
+    const activeText = isPVC ? 'text-indigo-700' : isPhoto ? 'text-amber-700' : 'text-blue-700';
+
+    return (
+      <button 
+        onClick={!disabled ? onClick : undefined} 
+        disabled={disabled}
+        className={`p-4 rounded-xl border-2 font-bold flex items-center justify-center gap-2 transition-all relative overflow-hidden ${
+          disabled
+            ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+            : active 
+              ? `${activeBorder} ${activeBg} ${activeText}` 
+              : 'border-slate-200 hover:border-slate-300'
+        }`}
+      >
+        <AnimatePresence mode="wait">
+          {active && (
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            >
+              <Check size={18} strokeWidth={3} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {label}
+      </button>
+    );
+  };
 
   const handleAddToCart = async () => {
     if (files.length === 0) {
@@ -267,8 +295,8 @@ export default function DocumentPrintingPage() {
       return;
     }
     
-    if (files.some(f => f.status !== 'done')) {
-      alert("Please wait for all files to finish uploading.");
+    if (files.some(f => f.status !== 'done' || f.needsPassword)) {
+      alert("Please wait for all files to finish uploading and ensure all password-protected PDFs are unlocked.");
       return;
     }
 
@@ -281,10 +309,10 @@ export default function DocumentPrintingPage() {
 
       addToCart({
         id: `DOC_${Date.now()}`,
-        title: `Document Printing (${colorMode}, ${printSide}, ${binding})`,
+        title: `${category.charAt(0) + category.slice(1).toLowerCase()} Printing (${colorMode}, ${printSide}, ${binding})`,
         price: unitPrice,
         quantity: copies,
-        category: 'DOCUMENTS',
+        category: category,
         files: uploadedFiles,
         options: { 
           colorMode, 
@@ -454,8 +482,8 @@ export default function DocumentPrintingPage() {
                         className="flex flex-col p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-accent-blue/30 transition-all gap-3"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4 overflow-hidden">
-                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+                          <div className="flex items-center gap-4 overflow-hidden flex-1">
+                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-slate-100">
                               {file.thumbnail ? (
                                 <img src={file.thumbnail} alt="Preview" className="w-full h-full object-cover" />
                               ) : (
@@ -470,15 +498,35 @@ export default function DocumentPrintingPage() {
                                 )
                               )}
                             </div>
-                            <div className="truncate">
-                              <p className="font-black text-ink truncate">{file.name}</p>
-                              {file.status === 'processing' ? (
-                                <p className="text-xs font-bold text-accent-blue uppercase tracking-widest flex items-center gap-1">
-                                  <Loader2 size={10} className="animate-spin" /> Processing...
+                            <div className="truncate flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className="font-black text-ink truncate max-w-[200px]">{file.name}</p>
+                                {file.status === 'uploading' && <Loader2 size={14} className="animate-spin text-accent-blue" />}
+                                {file.status === 'processing' && <RefreshCw size={14} className="animate-spin text-purple-500" />}
+                                {file.status === 'done' && <CheckCircle2 size={14} className="text-green-500" />}
+                                {file.status === 'error' && <AlertCircle size={14} className="text-red-500" />}
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                  {file.pages > 0 ? `${file.pages} ${file.pages === 1 ? 'page' : 'pages'}` : 'Calculating...'}
                                 </p>
-                              ) : (
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{file.pages} {file.pages === 1 ? 'page' : 'pages'}</p>
-                              )}
+                                <div className="flex items-center gap-1.5">
+                                  <div className={`w-1.5 h-1.5 rounded-full ${
+                                    file.status === 'done' ? 'bg-green-500' : 
+                                    file.status === 'error' ? 'bg-red-500' : 
+                                    file.status === 'processing' ? 'bg-purple-500 animate-pulse' :
+                                    'bg-accent-blue animate-pulse'
+                                  }`} />
+                                  <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                    file.status === 'done' ? 'text-green-500' : 
+                                    file.status === 'error' ? 'text-red-500' : 
+                                    file.status === 'processing' ? 'text-purple-500' :
+                                    'text-accent-blue'
+                                  }`}>
+                                    {file.status}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                           <button 
@@ -490,29 +538,20 @@ export default function DocumentPrintingPage() {
                           </button>
                         </div>
                         
-                        {(file.status === 'uploading' || file.status === 'done' || file.status === 'error' || file.status === 'processing') && (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                              <span className={
-                                file.status === 'done' ? 'text-green-500' : 
-                                file.status === 'error' ? 'text-red-500' : 
-                                file.status === 'processing' ? 'text-purple-500' :
-                                'text-accent-blue'
-                              }>
-                                {file.status === 'done' ? 'Complete' : 
-                                 file.status === 'error' ? 'Upload Failed' : 
-                                 file.status === 'processing' ? 'Processing...' :
-                                 'Uploading...'}
-                              </span>
+                        {(file.status === 'uploading' || file.status === 'done' || file.status === 'error' || file.status === 'processing') && !file.needsPassword && (
+                          <div className="space-y-2 mt-1">
+                            <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
                               <span className="text-slate-400">
-                                {file.status === 'error' ? (
-                                  <button onClick={() => uploadFile(file as any)} className="text-red-600 hover:underline font-bold">Retry</button>
-                                ) : (
-                                  `${Math.round(file.progress || 0)}%`
-                                )}
+                                {file.status === 'done' ? 'Upload Complete' : 
+                                 file.status === 'error' ? 'Upload Failed' : 
+                                 file.status === 'processing' ? 'Processing Document...' :
+                                 `Uploading to Cloud... ${Math.round(file.progress || 0)}%`}
                               </span>
+                              {file.status === 'error' && (
+                                <button onClick={() => uploadFile(file as any)} className="text-red-600 hover:underline font-bold">Retry Upload</button>
+                              )}
                             </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden relative">
+                            <div className="w-full bg-slate-200/50 rounded-full h-1.5 overflow-hidden relative">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${file.status === 'done' ? 100 : file.progress || 0}%` }}
@@ -520,14 +559,52 @@ export default function DocumentPrintingPage() {
                                 className={`h-full rounded-full relative ${
                                   file.status === 'done' ? 'bg-green-500' : 
                                   file.status === 'error' ? 'bg-red-500' : 
-                                  file.status === 'processing' ? 'bg-purple-500 animate-pulse' :
+                                  file.status === 'processing' ? 'bg-purple-500' :
                                   'bg-accent-blue'
                                 }`}
-                              />
+                              >
+                                {(file.status === 'uploading' || file.status === 'processing') && (
+                                  <motion.div 
+                                    animate={{ x: ['-100%', '100%'] }}
+                                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                                  />
+                                )}
+                              </motion.div>
                             </div>
                             {file.status === 'error' && (
-                              <p className="text-[10px] text-red-500 font-bold">Please check your connection and try again.</p>
+                              <p className="text-[9px] text-red-500 font-bold">Connection lost. Please check your internet and retry.</p>
                             )}
+                          </div>
+                        )}
+
+                        {file.needsPassword && (
+                          <div className="mt-2 space-y-2 bg-red-50 p-3 rounded-xl border border-red-100">
+                            <p className="text-xs font-bold text-red-600 flex items-center gap-1">
+                              <Lock size={14} /> This PDF is password protected.
+                            </p>
+                            <div className="flex gap-2">
+                              <input 
+                                type="password" 
+                                placeholder="Enter PDF password" 
+                                className="flex-1 p-2 text-sm rounded-lg border border-red-200 focus:border-red-400 outline-none bg-white"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    processPdf(file.file, file.id, e.currentTarget.value);
+                                  }
+                                }}
+                                id={`pwd-${file.id}`}
+                              />
+                              <button 
+                                onClick={() => {
+                                  const input = document.getElementById(`pwd-${file.id}`) as HTMLInputElement;
+                                  if (input) processPdf(file.file, file.id, input.value);
+                                }}
+                                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors"
+                              >
+                                Unlock
+                              </button>
+                            </div>
                           </div>
                         )}
                       </motion.div>
@@ -565,6 +642,20 @@ export default function DocumentPrintingPage() {
             </div>
             
             <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="block font-black uppercase text-[10px] tracking-widest text-slate-400 ml-1">Service Category</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['DOCUMENTS', 'PHOTOS', 'PVC CARDS'].map((cat) => (
+                    <OptionButton 
+                      key={cat}
+                      label={cat === 'PVC CARDS' ? 'PVC' : cat.charAt(0) + cat.slice(1).toLowerCase()} 
+                      active={category === cat} 
+                      onClick={() => setCategory(cat)} 
+                    />
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <label className="block font-black uppercase text-[10px] tracking-widest text-slate-400 ml-1">Color Mode</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -649,16 +740,46 @@ export default function DocumentPrintingPage() {
                   <ShoppingBasket size={20} className="text-accent-amber" />
                 </div>
               </div>
+
+              {/* Dynamic Price Breakdown */}
+              <div className="bg-white/5 rounded-2xl p-5 space-y-3 border border-white/5">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Price Breakdown</p>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Printing ({totalPages} pages)</span>
+                    <span className="font-bold">₹{printingTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-slate-500 pl-2">
+                    <span>Rate: ₹{pricePerSide.toFixed(2)} / page</span>
+                    <span>{colorMode} • {printSide}</span>
+                  </div>
+                  
+                  {binding !== 'None' && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">{binding} Binding</span>
+                      <span className="font-bold">₹{bindingCost.toFixed(2)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="pt-2 border-t border-white/10 flex justify-between items-center">
+                    <span className="text-slate-400">Unit Price</span>
+                    <span className="font-bold text-accent-amber">₹{unitPrice.toFixed(2)}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Quantity</span>
+                    <span className="font-bold">× {copies}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4 text-xs font-bold">
-                <div className="flex justify-between text-slate-400"><span>Files</span><span className="text-white">{files.length}</span></div>
-                <div className="flex justify-between text-slate-400"><span>Pages</span><span className="text-white">{totalPages}</span></div>
-                <div className="flex justify-between text-slate-400"><span>Mode</span><span className="text-white">{colorMode}</span></div>
-                <div className="flex justify-between text-slate-400"><span>Sides</span><span className="text-white">{printSide}</span></div>
-                <div className="flex justify-between text-slate-400"><span>Binding</span><span className="text-white">{binding}</span></div>
-                <div className="flex justify-between text-slate-400"><span>Copies</span><span className="text-white">x{copies}</span></div>
                 <div className="pt-6 border-t border-white/10">
                   <div className="flex justify-between items-end">
-                    <span className="text-slate-400">Total Amount</span>
+                    <div className="space-y-1">
+                      <span className="text-slate-400 block">Total Amount</span>
+                      <span className="text-[10px] text-green-400 font-black uppercase tracking-widest">Inclusive of all taxes</span>
+                    </div>
                     <span className="text-4xl font-black text-white tracking-tighter">₹{totalPrice.toFixed(0)}</span>
                   </div>
                 </div>
@@ -667,17 +788,18 @@ export default function DocumentPrintingPage() {
                 whileHover={{ scale: files.length > 0 && !isUploading && !files.some(f => f.status !== 'done') ? 1.02 : 1 }}
                 whileTap={{ scale: files.length > 0 && !isUploading && !files.some(f => f.status !== 'done') ? 0.98 : 1 }}
                 onClick={handleAddToCart}
-                disabled={isUploading || files.length === 0 || files.some(f => f.status !== 'done')}
+                disabled={isUploading || files.length === 0 || files.some(f => f.status !== 'done' || f.needsPassword)}
                 className={`w-full py-5 rounded-2xl font-black text-lg text-center flex items-center justify-center gap-2 transition-all duration-300 ${
-                  files.length > 0 && !isUploading && !files.some(f => f.status !== 'done')
+                  files.length > 0 && !isUploading && !files.some(f => f.status !== 'done' || f.needsPassword)
                     ? 'bg-accent-amber text-ink hover:bg-amber-500 shadow-[0_20px_50px_rgba(251,191,36,0.3)]' 
                     : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/5'
                 }`}
               >
-                {isUploading || (files.length > 0 && files.some(f => f.status !== 'done')) ? (
+                {isUploading || (files.length > 0 && files.some(f => f.status !== 'done' || f.needsPassword)) ? (
                   <>
                     <Loader2 className="animate-spin" size={24} />
-                    {files.some(f => f.status !== 'done') ? 'Uploading...' : 'Adding to Cart...'}
+                    {files.some(f => f.status !== 'done' && !f.needsPassword) ? 'Uploading...' : 
+                     files.some(f => f.needsPassword) ? 'Unlock Files...' : 'Processing...'}
                   </>
                 ) : (
                   files.length > 0 ? (
@@ -694,7 +816,6 @@ export default function DocumentPrintingPage() {
           </div>
         </div>
       </div>
-      
       {/* Mobile Floating Add to Cart */}
       <div className="lg:hidden fixed bottom-0 left-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100 z-40 flex items-center justify-between gap-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <div className="flex flex-col">
@@ -703,14 +824,14 @@ export default function DocumentPrintingPage() {
         </div>
         <button 
           onClick={handleAddToCart}
-          disabled={isUploading || files.length === 0 || files.some(f => f.status !== 'done')}
+          disabled={isUploading || files.length === 0 || files.some(f => f.status !== 'done' || f.needsPassword)}
           className={`flex-1 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all ${
-            files.length > 0 && !isUploading && !files.some(f => f.status !== 'done')
+            files.length > 0 && !isUploading && !files.some(f => f.status !== 'done' || f.needsPassword)
               ? 'bg-accent-amber text-ink shadow-lg shadow-amber-200' 
               : 'bg-slate-100 text-slate-400 cursor-not-allowed'
           }`}
         >
-          {isUploading || (files.length > 0 && files.some(f => f.status !== 'done')) ? (
+          {isUploading || (files.length > 0 && files.some(f => f.status !== 'done' || f.needsPassword)) ? (
             <Loader2 className="animate-spin" size={20} />
           ) : (
             <>
@@ -760,6 +881,40 @@ export default function DocumentPrintingPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Sample Prints Gallery */}
+      <div className="bg-white p-8 lg:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-accent-blue/10 text-accent-blue rounded-2xl flex items-center justify-center">
+            <ImageIcon size={24} />
+          </div>
+          <h2 className="text-3xl font-black font-headline tracking-tight text-ink">Sample Prints</h2>
+        </div>
+        
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {[
+            { title: 'Spiral Binding', img: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&q=80' },
+            { title: 'Color Documents', img: 'https://images.unsplash.com/photo-1586075010633-24426d5628fa?w=400&q=80' },
+            { title: 'B&W Reports', img: 'https://images.unsplash.com/photo-1517842645767-c639042777db?w=400&q=80' },
+            { title: 'Stapled Prints', img: 'https://images.unsplash.com/photo-1568667256549-094345857637?w=400&q=80' }
+          ].map((sample, idx) => (
+            <div key={idx} className="space-y-4">
+              <h3 className="font-black text-lg text-ink">{sample.title}</h3>
+              <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm group">
+                <img 
+                  src={sample.img} 
+                  alt={sample.title} 
+                  className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-slate-400 font-bold text-sm italic">
+          * Professional quality printing and finishing for all your document needs.
+        </p>
       </div>
     </div>
   );

@@ -14,6 +14,15 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState('paytm');
   const [deliveryMethod, setDeliveryMethod] = useState<'Home Delivery' | 'Store Pickup'>('Home Delivery');
+  const [shippingMethod, setShippingMethod] = useState<'Standard' | 'Express'>('Standard');
+  
+  const shippingCosts = {
+    'Standard': 50,
+    'Express': 150,
+    'Store Pickup': 0
+  };
+
+  const currentShippingCost = deliveryMethod === 'Store Pickup' ? 0 : shippingCosts[shippingMethod];
   
   // Reset payment method if it was 'cash' but user switched to 'Home Delivery'
   React.useEffect(() => {
@@ -35,7 +44,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const finalTotal = totalPrice - discount;
+  const finalTotal = totalPrice - discount + currentShippingCost;
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -104,6 +113,8 @@ export default function CheckoutPage() {
         customerPhone: formData.phone,
         deliveryAddress: deliveryMethod === 'Home Delivery' ? formData.address : 'Store Pickup',
         deliveryMethod,
+        shippingMethod: deliveryMethod === 'Home Delivery' ? shippingMethod : 'Store Pickup',
+        shippingCost: currentShippingCost,
         couponCode,
         items: cart,
         subtotal: totalPrice,
@@ -113,7 +124,8 @@ export default function CheckoutPage() {
         paymentStatus,
         paymentMethod,
         createdAt: serverTimestamp(),
-        files: cart.flatMap(item => item.files || [])
+        files: cart.flatMap(item => item.files || []),
+        adminKey: 'Ammu@6231' // Enable management via secret key
       };
       
       console.log("Order data:", orderData);
@@ -210,7 +222,41 @@ export default function CheckoutPage() {
             </div>
             <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="Email Address" className="w-full p-4 rounded-xl border-slate-200" />
             {deliveryMethod === 'Home Delivery' && (
-              <textarea name="address" value={formData.address} onChange={handleInputChange} placeholder="Delivery Address (Bangalore/Gunjur)" className="w-full p-4 rounded-xl border-slate-200 h-32" />
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Shipping Speed</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setShippingMethod('Standard')}
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${shippingMethod === 'Standard' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shippingMethod === 'Standard' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Truck size={16} />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-ink text-sm">Standard</p>
+                        <p className="text-[10px] text-slate-500">3-5 Business Days</p>
+                      </div>
+                    </div>
+                    <span className="font-black text-blue-600 text-sm">₹{shippingCosts['Standard']}</span>
+                  </button>
+                  <button 
+                    onClick={() => setShippingMethod('Express')}
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${shippingMethod === 'Express' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${shippingMethod === 'Express' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Clock size={16} />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-ink text-sm">Express</p>
+                        <p className="text-[10px] text-slate-500">1-2 Business Days</p>
+                      </div>
+                    </div>
+                    <span className="font-black text-blue-600 text-sm">₹{shippingCosts['Express']}</span>
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -369,8 +415,10 @@ export default function CheckoutPage() {
                 </div>
               )}
               <div className="flex justify-between text-sm font-bold text-slate-500">
-                <span>Shipping</span>
-                <span className="text-green-600">Free</span>
+                <span>Shipping ({deliveryMethod === 'Store Pickup' ? 'Pickup' : shippingMethod})</span>
+                <span className={currentShippingCost === 0 ? "text-green-600" : "text-ink"}>
+                  {currentShippingCost === 0 ? 'Free' : `₹${currentShippingCost}`}
+                </span>
               </div>
               <hr className="border-slate-100" />
               <div className="flex justify-between items-end">

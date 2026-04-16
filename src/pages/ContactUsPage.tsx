@@ -35,9 +35,8 @@ export default function ContactUsPage() {
               <div className="space-y-2">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Physical Atelier</h3>
                 <p className="text-lg font-black text-ink leading-tight">
-                  M S Star Xerox and Stationery<br />
-                  No 213/214, 1a, Near Gokul Circle,<br />
-                  Gunjur Main Road, Bangalore 560087
+                  M S STAR XEROX<br />
+                  no 247 gunjur bangalore 560087
                 </p>
                 <div className="inline-block bg-green-500/10 text-green-600 px-3 py-1.5 rounded-full text-xs font-bold mt-2">
                   Open: Mon - Sat (8:30 AM - 9:00 PM)

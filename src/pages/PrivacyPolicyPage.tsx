@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
             Privacy Policy
           </h1>
           <p className="text-slate-400 text-lg font-medium max-w-2xl mx-auto">
-            At MS STAR, we treat your data with the same precision and care as our finest prints. 
+            At M S STAR XEROX, we treat your data with the same precision and care as our finest prints. 
             Learn how we protect your information in our digital atelier.
           </p>
           <p className="text-slate-500 text-sm font-medium">Last updated: April 13, 2026</p>
@@ -127,7 +127,7 @@ export default function PrivacyPolicyPage() {
               <p className="text-slate-600 font-medium ml-11 leading-relaxed">
                 We use cookies to enhance your browsing experience. Cookies are small files stored on your device that help us 
                 remember your preferences and analyze site traffic. You can choose to disable cookies through your browser 
-                settings, though some features of msstar.in may not function correctly without them.
+                settings, though some features of M S STAR XEROX may not function correctly without them.
               </p>
             </section>
 
@@ -182,11 +182,11 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-2xl font-black text-ink font-headline tracking-tight">Contact Us</h3>
               <p className="text-slate-500 text-sm font-medium">Have questions about your privacy?</p>
               <a 
-                href="mailto:support@msstar.in" 
+                href="mailto:msgunjur@gmail.com" 
                 className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl text-ink font-black hover:bg-slate-100 transition-colors"
               >
                 <Mail className="text-accent-blue" size={20} />
-                support@msstar.in
+                msgunjur@gmail.com
               </a>
             </div>
           </div>

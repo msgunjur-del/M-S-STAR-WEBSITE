@@ -1,57 +1,84 @@
 import React from 'react';
+import { CreditCard, ShieldCheck, Clock, FileText, ChevronRight } from 'lucide-react';
 
 export default function PaymentTermsPage() {
+  const sections = [
+    {
+      title: "Accepted Payment Methods",
+      icon: <CreditCard className="text-accent-blue" />,
+      content: "We accept a wide range of secure payment methods to provide convenience to our customers:",
+      items: [
+        "UPI (Google Pay, PhonePe, Paytm, etc.)",
+        "Credit and Debit Cards (Visa, Mastercard, RuPay)",
+        "Net Banking from all major Indian banks",
+        "Mobile Wallets"
+      ]
+    },
+    {
+      title: "Advance Payment Requirement",
+      icon: <Clock className="text-accent-amber" />,
+      content: "Due to the custom nature of our printing services (PVC cards, photos, and documents), 100% advance payment is required at the time of order placement. Production will only commence once the payment has been successfully verified."
+    },
+    {
+      title: "Transaction Security",
+      icon: <ShieldCheck className="text-green-500" />,
+      content: "All payments are processed through encrypted, industry-standard payment gateways. M S STAR XEROX does not store your credit card or bank account details on our servers. Your financial information is handled directly by our secure payment partners."
+    },
+    {
+      title: "Billing & Invoices",
+      icon: <FileText className="text-purple-500" />,
+      content: "A digital invoice will be generated and sent to your registered email address immediately after a successful transaction. You can also download your past invoices from your User Dashboard."
+    }
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto px-6 py-16 space-y-12">
-      <div className="space-y-4">
-        <h1 className="text-4xl font-bold font-headline text-slate-900">Payment Terms</h1>
-        <p className="text-slate-500">Last updated: 4/12/2026</p>
+    <div className="min-h-screen bg-slate-50 py-20">
+      <div className="max-w-4xl mx-auto px-6 space-y-12">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest border border-blue-100">
+            <CreditCard size={12} />
+            <span>Financial Policy</span>
+          </div>
+          <h1 className="text-5xl lg:text-6xl font-black font-headline tracking-tighter text-ink">
+            PAYMENT <span className="text-blue-600">TERMS.</span>
+          </h1>
+          <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">
+            Clear, secure, and transparent payment guidelines for all our professional printing services.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {sections.map((section, idx) => (
+            <div key={idx} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center">
+                  {section.icon}
+                </div>
+                <h2 className="text-2xl font-black text-ink">{section.title}</h2>
+              </div>
+              <p className="text-slate-600 font-medium leading-relaxed">
+                {section.content}
+              </p>
+              {section.items && (
+                <ul className="grid sm:grid-cols-2 gap-3 pt-2">
+                  {section.items.map((item, i) => (
+                    <li key={i} className="flex items-center gap-2 text-slate-500 font-bold text-sm">
+                      <ChevronRight size={14} className="text-accent-blue" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-slate-100 p-8 rounded-[2.5rem] text-center">
+          <p className="text-sm text-slate-500 font-bold">
+            Last updated: April 12, 2026. For any payment related queries, please contact us at <span className="text-ink">msgunjur@gmail.com</span>
+          </p>
+        </div>
       </div>
-
-      <p className="text-slate-600 leading-relaxed">
-        To ensure a smooth and secure transaction process for our professional printing services, 
-        we have established the following payment terms.
-      </p>
-
-      <section className="space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900">1. Accepted Payment Methods</h2>
-        <p className="text-slate-600 leading-relaxed">
-          We accept a wide range of secure payment methods to provide convenience to our customers:
-        </p>
-        <ul className="space-y-3 text-slate-600 ml-4">
-          <li className="flex gap-2"><span>•</span> UPI (Google Pay, PhonePe, Paytm, etc.)</li>
-          <li className="flex gap-2"><span>•</span> Credit and Debit Cards (Visa, Mastercard, RuPay)</li>
-          <li className="flex gap-2"><span>•</span> Net Banking from all major Indian banks</li>
-          <li className="flex gap-2"><span>•</span> Mobile Wallets</li>
-        </ul>
-      </section>
-
-      <section className="space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900">2. Advance Payment Requirement</h2>
-        <p className="text-slate-600 leading-relaxed">
-          Due to the custom nature of our printing services (PVC cards, photos, and documents), 
-          <strong> 100% advance payment</strong> is required at the time of order placement. 
-          Production will only commence once the payment has been successfully verified.
-        </p>
-      </section>
-
-      <section className="space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900">3. Transaction Security</h2>
-        <p className="text-slate-600 leading-relaxed">
-          All payments are processed through encrypted, industry-standard payment gateways. 
-          MS Star does not store your credit card or bank account details on our servers. 
-          Your financial information is handled directly by our secure payment partners.
-        </p>
-      </section>
-
-      <section className="space-y-6">
-        <h2 className="text-2xl font-bold text-slate-900">4. Billing & Invoices</h2>
-        <p className="text-slate-600 leading-relaxed">
-          A digital invoice will be generated and sent to your registered email address immediately 
-          after a successful transaction. You can also download your past invoices from your 
-          User Dashboard.
-        </p>
-      </section>
     </div>
   );
 }
