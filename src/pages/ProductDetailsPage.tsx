@@ -440,7 +440,11 @@ export default function ProductDetailsPage() {
     );
   }
 
-  const gallery = Array.from(new Set([product.imageUrl, ...(product.galleryImages || [])])).filter(Boolean);
+  const gallery = Array.from(new Set([
+    product.imageUrl, 
+    ...(product.galleryImages || []),
+    ...files.map(f => f.thumbnail || f.url).filter(Boolean)
+  ])).filter(Boolean);
 
   return (
     <div className="min-h-screen bg-slate-50/30">

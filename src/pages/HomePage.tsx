@@ -88,7 +88,7 @@ export default function HomePage() {
               PRINTING <br />
               <span className="text-accent-blue">REIMAGINED.</span>
             </h1>
-            <p className="text-xl text-slate-500 max-w-lg leading-relaxed font-medium">
+            <p className="text-xl text-slate-700 max-w-lg leading-relaxed font-bold">
               Precision-crafted PVC Smart Cards, studio-grade photography, and document services delivered with lightning speed.
             </p>
 
@@ -111,7 +111,7 @@ export default function HomePage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => searchQuery.trim() && setShowSuggestions(true)}
                   placeholder="Search for PVC cards, photos..."
-                  className="w-full pl-14 pr-12 py-5 bg-white border border-slate-200 rounded-[2rem] font-bold text-ink outline-none focus:ring-4 focus:ring-accent-blue/10 focus:border-accent-blue transition-all shadow-xl shadow-slate-200/50"
+                  className="w-full pl-14 pr-12 py-5 bg-card border border-slate-300 rounded-[2rem] font-bold text-ink outline-none focus:ring-4 focus:ring-accent-blue/10 focus:border-accent-blue transition-all shadow-xl shadow-slate-200/50 dark:border-slate-800 dark:shadow-black/20"
                 />
                 {searchQuery && (
                   <button 
@@ -173,12 +173,12 @@ export default function HomePage() {
             </div>
 
             <div className="flex flex-wrap gap-4">
-              <Link to="/document-printing" className="bg-accent-blue text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-2xl shadow-blue-200 flex items-center gap-3 group">
-                Start Printing
+              <Link to="/document-printing" className="bg-accent-blue text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-blue-700 transition-all shadow-2xl shadow-blue-200 flex items-center gap-3 group hover:-translate-y-1">
+                Print Documents Online
                 <ArrowRight className="group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link to="/rate-calculator" className="bg-white text-ink px-10 py-5 rounded-2xl font-black text-lg border border-slate-200 hover:bg-slate-50 transition-all">
-                Price List
+              <Link to="/rate-calculator" className="bg-card text-ink px-10 py-5 rounded-2xl font-black text-lg border border-slate-300 hover:bg-slate-100 transition-all flex items-center gap-3 group hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/50 dark:border-slate-800 dark:hover:bg-slate-800 dark:hover:shadow-black/20">
+                Check Printing Rates
               </Link>
             </div>
             
@@ -202,27 +202,26 @@ export default function HomePage() {
             transition={{ duration: 1 }}
             className="relative"
           >
-            <div className="relative z-10 bg-white p-4 rounded-[3rem] shadow-[0_50px_100px_rgba(15,23,42,0.1)] rotate-2 border border-slate-100">
-              <div className="aspect-[4/3] bg-slate-100 rounded-[2.5rem] overflow-hidden">
+            <div className="relative z-10 p-4 lg:p-12">
+              <div className="relative aspect-[16/9] lg:aspect-auto w-full h-full lg:min-h-[600px] flex items-center justify-center">
                 <img 
-                  src="https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?auto=format&fit=crop&q=80&w=1000" 
-                  alt="Premium Printing" 
-                  className="w-full h-full object-cover"
+                  src="https://images.unsplash.com/photo-1626785774573-4b799315345d?auto=format&fit=crop&q=80&w=1000" 
+                  alt="Premium Printing Studio" 
+                  className="w-full h-full object-contain filter drop-shadow-[0_50px_100px_rgba(0,0,0,0.15)] dark:drop-shadow-[0_50px_100px_rgba(0,0,0,0.3)] scale-110 lg:scale-125"
                   referrerPolicy="no-referrer"
                 />
               </div>
             </div>
-            {/* Decorative Elements */}
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent-amber/10 rounded-full blur-3xl" />
-            <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-accent-blue/10 rounded-full blur-3xl" />
+            {/* Decoration */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-blue-500/5 blur-[120px] rounded-full z-0" />
             
             <div className="absolute -bottom-6 -right-6 z-20 glass p-6 rounded-3xl shadow-xl flex items-center gap-4 animate-bounce-slow">
-              <div className="bg-accent-amber text-white p-3 rounded-2xl">
-                <Clock size={24} />
+              <div className="bg-[#2563EB] text-white p-3 rounded-2xl">
+                <CheckCircle2 size={24} />
               </div>
               <div>
-                <p className="font-black text-ink leading-none">24H Delivery</p>
-                <p className="text-xs font-bold text-slate-400">Bangalore Wide</p>
+                <p className="font-black text-ink leading-none">Studio Quality</p>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-400">Guaranteed Results</p>
               </div>
             </div>
           </motion.div>
@@ -231,22 +230,22 @@ export default function HomePage() {
 
       {/* Trust Bar */}
       <section className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-12 border-y border-slate-100">
-          <div className="flex items-center gap-3 text-slate-400">
-            <ShieldCheck size={20} />
-            <span className="font-bold text-sm uppercase tracking-widest">Secure Payments</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-12 border-y border-slate-300 dark:border-slate-800">
+          <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+            <ShieldCheck size={20} className="text-accent-blue" />
+            <span className="font-black text-sm uppercase tracking-widest">Secure Payments</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-400">
-            <Truck size={20} />
-            <span className="font-bold text-sm uppercase tracking-widest">Express Shipping</span>
+          <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+            <Truck size={20} className="text-accent-blue" />
+            <span className="font-black text-sm uppercase tracking-widest">Express Shipping</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-400">
-            <Zap size={20} />
-            <span className="font-bold text-sm uppercase tracking-widest">Instant Quotes</span>
+          <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+            <Zap size={20} className="text-accent-blue" />
+            <span className="font-black text-sm uppercase tracking-widest">Instant Quotes</span>
           </div>
-          <div className="flex items-center gap-3 text-slate-400">
-            <Clock size={20} />
-            <span className="font-bold text-sm uppercase tracking-widest">24/7 Support</span>
+          <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+            <Clock size={20} className="text-accent-blue" />
+            <span className="font-black text-sm uppercase tracking-widest">24/7 Support</span>
           </div>
         </div>
       </section>
@@ -258,7 +257,7 @@ export default function HomePage() {
             <h2 className="text-4xl lg:text-5xl font-black font-headline tracking-tighter text-ink">
               OUR <span className="text-accent-blue">SERVICES.</span>
             </h2>
-            <p className="text-slate-500 font-medium max-w-md">
+            <p className="text-slate-700 font-bold max-w-md dark:text-slate-400">
               Explore our range of professional printing solutions tailored for your specific needs.
             </p>
           </div>
@@ -291,7 +290,7 @@ export default function HomePage() {
               >
                 <Link 
                   to={`/product/${service.id}`} 
-                  className="group block bg-white p-4 rounded-[2.5rem] border border-slate-100 card-hover"
+                  className="group block bg-card p-4 rounded-[2.5rem] border border-slate-300 card-hover dark:border-slate-800"
                 >
                   <div className="aspect-square bg-slate-50 rounded-[2rem] mb-6 overflow-hidden relative">
                     <img 
@@ -460,9 +459,21 @@ export default function HomePage() {
                 transition={{ delay: idx * 0.2 }}
                 className="relative z-10 bg-white p-8 rounded-[3rem] border border-slate-100 shadow-xl shadow-slate-200/40 space-y-6 text-center group hover:translate-y-[-8px] transition-all duration-500"
               >
-                <div className={`w-20 h-20 ${item.color} text-white rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl shadow-blue-200 group-hover:rotate-6 transition-transform duration-500`}>
+                <motion.div 
+                  className={`w-20 h-20 ${item.color} text-white rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl shadow-blue-200 group-hover:rotate-6 transition-transform duration-500`}
+                  animate={{
+                    y: [0, -10, 0],
+                    scale: [1, 1.05, 1]
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    delay: idx * 0.2 // Stagger the animation slightly
+                  }}
+                >
                   {item.icon}
-                </div>
+                </motion.div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-2">
                     <span className="w-6 h-px bg-slate-200" />

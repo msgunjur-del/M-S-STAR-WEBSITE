@@ -36,7 +36,7 @@ export default function ProductCard({ id, title, description, price, category, i
         
         <Link 
           to={`/product/${id}`} 
-          className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm card-hover flex flex-col h-full group relative overflow-hidden z-10 transition-colors duration-500 group-hover/card:border-transparent"
+          className="bg-card rounded-[2.5rem] p-6 border border-slate-300 shadow-sm card-hover flex flex-col h-full group relative overflow-hidden z-10 transition-colors duration-500 group-hover/card:border-transparent dark:border-slate-800"
         >
           <div className="aspect-square bg-slate-50 rounded-[1.5rem] mb-6 flex items-center justify-center text-slate-400 font-bold overflow-hidden relative">
             <img 
@@ -67,14 +67,14 @@ export default function ProductCard({ id, title, description, price, category, i
             <h3 className="text-xl font-black font-headline tracking-tight text-ink group-hover:text-accent-blue transition-colors leading-tight">
               {title}
             </h3>
-            <p className="text-xs font-bold text-slate-400 leading-relaxed line-clamp-2">
+            <p className="text-xs font-black text-slate-700 leading-relaxed line-clamp-2 dark:text-slate-400">
               {description}
             </p>
           </div>
 
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-50">
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Starting from</span>
+              <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest dark:text-slate-400">Starting from</span>
               <span className="text-2xl font-black text-ink tracking-tighter">₹{price}</span>
             </div>
             <motion.div 
@@ -128,7 +128,7 @@ export default function ProductCard({ id, title, description, price, category, i
                 <h2 className="text-3xl font-black font-headline text-ink mb-4 leading-tight">
                   {title}
                 </h2>
-                <p className="text-slate-500 font-bold text-sm leading-relaxed mb-8 flex-grow">
+                <p className="text-slate-700 font-bold text-sm leading-relaxed mb-8 flex-grow dark:text-slate-400">
                   {description}
                 </p>
                 

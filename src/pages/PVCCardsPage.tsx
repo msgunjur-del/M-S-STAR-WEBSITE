@@ -90,12 +90,12 @@ export default function PVCCardsPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-24 glass rounded-[3rem] border border-slate-100">
-          <p className="text-slate-400 font-black text-xl">No PVC cards available at the moment.</p>
+        <div className="text-center py-24 glass rounded-[3rem] border border-slate-300 dark:border-slate-800">
+          <p className="text-slate-700 font-black text-xl dark:text-slate-400">No PVC cards available at the moment.</p>
         </div>
       )}
       {/* Sample Cards Gallery */}
-      <div className="bg-white p-8 lg:p-12 rounded-[3rem] border border-slate-100 shadow-sm space-y-10">
+      <div className="bg-card p-8 lg:p-12 rounded-[3rem] border border-slate-300 shadow-sm space-y-10 dark:border-slate-800 dark:bg-card">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-accent-blue/10 text-accent-blue rounded-2xl flex items-center justify-center">
             <ImageIcon size={24} />
@@ -112,7 +112,7 @@ export default function PVCCardsPage() {
           ].map((sample, idx) => (
             <div key={idx} className="space-y-4">
               <h3 className="font-black text-lg text-ink">{sample.title}</h3>
-              <div className="rounded-2xl overflow-hidden border border-slate-100 shadow-sm group">
+              <div className="rounded-2xl overflow-hidden border border-slate-300 shadow-sm group dark:border-slate-800">
                 <img 
                   src={sample.img} 
                   alt={sample.title} 
@@ -123,7 +123,7 @@ export default function PVCCardsPage() {
             </div>
           ))}
         </div>
-        <p className="text-center text-slate-400 font-bold text-sm italic">
+        <p className="text-center text-slate-700 font-bold text-sm italic dark:text-slate-400">
           * These are sample representations of our high-quality PVC printing.
         </p>
       </div>

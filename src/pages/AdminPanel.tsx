@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db, auth, storage } from '../firebase';
-import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateEmail, updatePassword, signInWithPopup, GoogleAuthProvider, signInAnonymously } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -146,6 +146,39 @@ export default function AdminPanel() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const resizeAndCompressImage = (file: File, maxWidth = 800, quality = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error("Canvas context failed"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error("Image load failed"));
+      };
+      reader.onerror = () => reject(new Error("File read failed"));
+    });
+  };
 
   const fetchAdminEmail = async () => {
     try {
@@ -340,17 +373,18 @@ export default function AdminPanel() {
   const handleDirectMainImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, productId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Clear value to allow same-file re-upload
+    e.target.value = '';
     
     setUploadingImage(true);
-    setActionMessage({ type: 'info', text: 'Uploading image to storage...' });
+    setActionMessage({ type: 'info', text: 'Optimizing and saving image...' });
     try {
-      if (!auth.currentUser) {
-        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error("File is too large completely, please keep base uploads under 2MB before compression.");
       }
       
-      const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
+      const downloadURL = await resizeAndCompressImage(file, 800, 0.7);
       
       await updateDoc(doc(db, 'products', productId), {
         imageUrl: downloadURL,
@@ -370,28 +404,29 @@ export default function AdminPanel() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewProduct: boolean) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Clear value to allow same-file re-upload
+    e.target.value = '';
     
     setUploadingImage(true);
-    setActionMessage({ type: 'info', text: 'Uploading image...' });
+    setActionMessage({ type: 'info', text: 'Optimizing and saving image...' });
     
     try {
-      if (!auth.currentUser) {
-        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
+      if (file.size > 2 * 1024 * 1024) {
+        throw new Error("File is too large, please keep base uploads under 2MB before compression.");
       }
       
-      const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
+      const downloadURL = await resizeAndCompressImage(file, 800, 0.7);
       
       if (isNewProduct) {
         setNewProduct(prev => prev ? { ...prev, imageUrl: downloadURL } : null);
       } else {
         setEditingProduct(prev => prev ? { ...prev, imageUrl: downloadURL } : null);
       }
-      setActionMessage({ type: 'success', text: 'Image uploaded successfully!' });
+      setActionMessage({ type: 'success', text: 'Image processed successfully!' });
       setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
     } catch (error: any) {
-      console.error("Error uploading image:", error);
+      console.error("Error processing image:", error);
       setActionMessage({ type: 'error', text: 'Upload failed: ' + error.message });
     } finally {
       setUploadingImage(false);
@@ -403,17 +438,17 @@ export default function AdminPanel() {
     if (!files || files.length === 0) return;
     
     setUploadingGallery(true);
-    setActionMessage({ type: 'info', text: `Uploading ${files.length} gallery images...` });
+    setActionMessage({ type: 'info', text: `Optimizing ${files.length} gallery images...` });
+    
+    const filesArray = Array.from(files) as File[];
+    e.target.value = '';
+
     try {
-      if (!auth.currentUser) {
-        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
-      }
       const newImageUrls: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const storageRef = ref(storage, `products/gallery/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        if (file.size > 2 * 1024 * 1024) continue;
+        const downloadURL = await resizeAndCompressImage(file, 800, 0.7);
         newImageUrls.push(downloadURL);
       }
       
@@ -426,8 +461,8 @@ export default function AdminPanel() {
       fetchData();
       setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
     } catch (error: any) {
-      console.error("Error uploading gallery images:", error);
-      setActionMessage({ type: 'error', text: 'Gallery upload failed: ' + error.message });
+      console.error("Error processing gallery images:", error);
+      setActionMessage({ type: 'error', text: 'Gallery processing failed: ' + error.message });
     } finally {
       setUploadingGallery(false);
     }
@@ -450,18 +485,18 @@ export default function AdminPanel() {
     if (!files || files.length === 0) return;
     
     setUploadingGallery(true);
-    setActionMessage({ type: 'info', text: `Uploading ${files.length} gallery images...` });
+    setActionMessage({ type: 'info', text: `Optimizing ${files.length} gallery images...` });
     
+    // We get the files array before clearing the input value
+    const filesArray = Array.from(files) as File[];
+    e.target.value = ''; // Allow re-uploading the same file if needed
+
     try {
-      if (!auth.currentUser) {
-        try { await signInAnonymously(auth); } catch (e: any) { if (e.code === 'auth/admin-restricted-operation') throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images."); else throw e; }
-      }
       const newImageUrls: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const storageRef = ref(storage, `products/gallery/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        if (file.size > 2 * 1024 * 1024) continue; // Skip huge files
+        const downloadURL = await resizeAndCompressImage(file, 800, 0.7);
         newImageUrls.push(downloadURL);
       }
       
@@ -477,11 +512,11 @@ export default function AdminPanel() {
         } : null);
       }
       
-      setActionMessage({ type: 'success', text: 'Gallery images uploaded successfully!' });
+      setActionMessage({ type: 'success', text: 'Gallery images processed successfully!' });
       setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
     } catch (error: any) {
-      console.error("Error uploading gallery images:", error);
-      setActionMessage({ type: 'error', text: 'Gallery upload failed: ' + error.message });
+      console.error("Error processing gallery images:", error);
+      setActionMessage({ type: 'error', text: 'Gallery processing failed: ' + error.message });
     } finally {
       setUploadingGallery(false);
     }
@@ -525,31 +560,26 @@ export default function AdminPanel() {
   };
 
   const handleOrderFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isDirect: boolean = false, isProcessed: boolean = false) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []) as File[];
     const targetOrder = isDirect ? viewingOrder : editingOrder;
-    if (!file || !targetOrder) return;
+    if (files.length === 0 || !targetOrder) return;
     
     setUploadingOrderFile(true);
     try {
-      if (!auth.currentUser) {
-        try {
-          await signInAnonymously(auth);
-        } catch (anonErr: any) {
-          if (anonErr.code === 'auth/admin-restricted-operation') {
-            throw new Error("Please enable Anonymous Authentication in Firebase Console to upload images.");
-          }
-          throw anonErr;
+      const folder = isProcessed ? 'processed' : 'customer';
+      const uploadedFiles = [];
+      
+      for (const file of files) {
+        if (file.type.startsWith('image/') && file.size <= 2 * 1024 * 1024) {
+          const downloadURL = await resizeAndCompressImage(file, 1200, 0.8);
+          uploadedFiles.push({ name: file.name, url: downloadURL, uploadedAt: new Date().toISOString() });
+        } else {
+           throw new Error("Only images under 2MB are supported due to preview database limits.");
         }
       }
-      const folder = isProcessed ? 'processed' : 'customer';
-      const storageRef = ref(storage, `orders/${targetOrder.id}/${folder}/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      
-      const fileObj = { name: file.name, url: downloadURL, uploadedAt: new Date().toISOString() };
       
       if (isProcessed) {
-        const newProcessedFiles = [...(targetOrder.processedFiles || []), fileObj];
+        const newProcessedFiles = [...(targetOrder.processedFiles || []), ...uploadedFiles];
         if (isDirect) {
           await updateDoc(doc(db, 'orders', targetOrder.id), {
             processedFiles: newProcessedFiles,
@@ -561,7 +591,7 @@ export default function AdminPanel() {
           setEditingOrder({ ...targetOrder, processedFiles: newProcessedFiles });
         }
       } else {
-        const newFiles = [...(targetOrder.files || []), fileObj];
+        const newFiles = [...(targetOrder.files || []), ...uploadedFiles];
         if (isDirect) {
           await updateDoc(doc(db, 'orders', targetOrder.id), {
             files: newFiles,
@@ -600,10 +630,10 @@ export default function AdminPanel() {
     try {
       const imageUrl = newProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
       await addDoc(collection(db, 'products'), {
-        title: newProduct.title,
-        description: newProduct.description,
-        price: Number(newProduct.price),
-        category: newProduct.category,
+        title: newProduct.title || '',
+        description: newProduct.description || '',
+        price: Number(newProduct.price) || 0,
+        category: newProduct.category || 'PVC CARDS',
         imageUrl: imageUrl,
         galleryImages: newProduct.galleryImages || [],
         adminKey: 'Ammu@6231'
@@ -624,10 +654,10 @@ export default function AdminPanel() {
     try {
       const imageUrl = editingProduct.imageUrl || `https://images.unsplash.com/photo-1562564055-71e051d33c19?w=800&q=80`;
       await updateDoc(doc(db, 'products', editingProduct.id), {
-        title: editingProduct.title,
-        description: editingProduct.description,
-        price: Number(editingProduct.price),
-        category: editingProduct.category,
+        title: editingProduct.title || '',
+        description: editingProduct.description || '',
+        price: Number(editingProduct.price) || 0,
+        category: editingProduct.category || 'PVC CARDS',
         imageUrl: imageUrl,
         galleryImages: editingProduct.galleryImages || [],
         adminKey: 'Ammu@6231'
@@ -649,6 +679,27 @@ export default function AdminPanel() {
         status,
         adminKey: 'Ammu@6231'
       });
+      
+      // Send email notification
+      const order = orders.find(o => o.id === id);
+      if (order && order.customerEmail) {
+        try {
+          await fetch('/api/send-order-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: order.customerEmail,
+              orderId: id,
+              status: status,
+              trackingNumber: order.trackingNumber,
+              courier: order.courier
+            })
+          });
+        } catch (emailError) {
+          console.error("Failed to send email notification:", emailError);
+        }
+      }
+
       await fetchData();
       setActionMessage({ type: 'success', text: 'Order status updated successfully!' });
       setTimeout(() => setActionMessage({ type: '', text: '' }), 3000);
@@ -751,6 +802,10 @@ export default function AdminPanel() {
     e.preventDefault();
     if (!editingOrder) return;
     try {
+      const originalOrder = orders.find(o => o.id === editingOrder.id);
+      const statusChanged = originalOrder && originalOrder.status !== editingOrder.status;
+      const trackingAdded = originalOrder && !originalOrder.trackingNumber && editingOrder.trackingNumber;
+
       await updateDoc(doc(db, 'orders', editingOrder.id), {
         customerName: editingOrder.customerName || '',
         customerEmail: editingOrder.customerEmail || '',
@@ -767,6 +822,25 @@ export default function AdminPanel() {
         status: editingOrder.status || 'Pending',
         adminKey: 'Ammu@6231'
       });
+
+      if ((statusChanged || trackingAdded) && editingOrder.customerEmail) {
+        try {
+          await fetch('/api/send-order-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: editingOrder.customerEmail,
+              orderId: editingOrder.id,
+              status: editingOrder.status || 'Pending',
+              trackingNumber: editingOrder.trackingNumber,
+              courier: editingOrder.courier
+            })
+          });
+        } catch (emailError) {
+          console.error("Failed to send email notification:", emailError);
+        }
+      }
+
       setEditingOrder(null);
       fetchData();
       setActionMessage({ type: 'success', text: 'Order details updated successfully!' });
@@ -880,35 +954,35 @@ export default function AdminPanel() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-900">
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-100">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-paper -mt-24 pt-24 dark:bg-slate-950">
+        <div className="bg-card p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-300 dark:bg-card dark:border-slate-800">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3 shadow-lg">
               <Settings size={32} />
             </div>
-            <h1 className="text-3xl font-extrabold text-slate-900 font-headline">Admin Access</h1>
-            <p className="text-slate-500 mt-2">Enter your credentials to manage msstar</p>
+            <h1 className="text-3xl font-black text-ink font-headline tracking-tight uppercase tracking-tighter">Admin Access</h1>
+            <p className="text-slate-600 mt-2 font-bold dark:text-slate-400">Enter your credentials to manage msstar</p>
           </div>
 
           <form onSubmit={handleAdminLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">User ID</label>
+              <label className="block text-xs font-black text-slate-700 mb-2 ml-1 uppercase tracking-widest dark:text-slate-400">User ID</label>
               <input 
                 type="text" 
                 value={loginUsername} 
                 onChange={e => setLoginUsername(e.target.value)} 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                className="w-full p-4 bg-paper border border-slate-300 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all dark:bg-slate-900 dark:border-slate-800" 
                 placeholder="Enter User ID"
                 required 
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">Password</label>
+              <label className="block text-xs font-black text-slate-700 mb-2 ml-1 uppercase tracking-widest dark:text-slate-400">Password</label>
               <input 
                 type="password" 
                 value={loginPassword} 
                 onChange={e => setLoginPassword(e.target.value)} 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                className="w-full p-4 bg-paper border border-slate-300 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all dark:bg-slate-900 dark:border-slate-800" 
                 placeholder="••••••••"
                 required 
               />
@@ -964,8 +1038,8 @@ export default function AdminPanel() {
 
   if (accessDenied) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center space-y-6 bg-slate-50 -mt-24 pt-24">
-        <div className="bg-white p-12 rounded-3xl shadow-xl text-center max-w-md border border-slate-100">
+      <div className="min-h-screen flex flex-col items-center justify-center space-y-6 bg-paper -mt-24 pt-24 dark:bg-slate-950">
+        <div className="bg-card p-12 rounded-3xl shadow-xl text-center max-w-md border border-slate-300 dark:bg-card dark:border-slate-800">
           <div className="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <LogOut size={32} />
           </div>
@@ -985,12 +1059,12 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 -mt-24 pt-24">
+    <div className="flex min-h-screen bg-paper -mt-24 pt-24 dark:bg-slate-950">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed h-full z-40">
+      <aside className="w-64 bg-card border-r border-slate-300 flex flex-col fixed h-full z-40 dark:bg-card dark:border-slate-800">
         <div className="p-6">
-          <h1 className="text-2xl font-extrabold text-blue-900 tracking-tight">msstar Admin</h1>
-          <p className="text-xs text-slate-500 mt-1">Management Portal</p>
+          <h1 className="text-2xl font-black text-ink tracking-tight">msstar Admin</h1>
+          <p className="text-xs text-slate-700 mt-1 dark:text-slate-400 font-bold">Management Portal</p>
         </div>
         
         <nav className="flex-1 overflow-y-auto py-4 space-y-1 pr-4">
@@ -1008,17 +1082,17 @@ export default function AdminPanel() {
           {renderSidebarItem('Settings', Settings)}
         </nav>
 
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-slate-300 dark:border-slate-800">
           <div className="flex items-center gap-3 mb-4 px-2">
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
               {user?.email?.charAt(0).toUpperCase() || 'A'}
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900 truncate w-32">{user?.email || 'admin@example.com'}</p>
-              <p className="text-xs text-slate-500">Admin</p>
+              <p className="text-sm font-black text-slate-900 truncate w-32 dark:text-white uppercase tracking-tighter">{user?.email || 'admin@example.com'}</p>
+              <p className="text-[10px] text-slate-600 font-black uppercase dark:text-slate-400">Admin</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-black text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors uppercase tracking-widest">
             <LogOut size={16} />
             Logout
           </button>
@@ -1037,67 +1111,63 @@ export default function AdminPanel() {
             </div>
 
             {/* System Status */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <div className="bg-card p-6 rounded-2xl border border-slate-300 shadow-sm dark:bg-card dark:border-slate-800">
+              <h3 className="text-sm font-black text-ink mb-4 flex items-center gap-2 uppercase tracking-widest">
                 <ShieldCheck className="text-blue-600" size={18} />
                 System Authorization Status
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p className="text-slate-500 mb-1">Current User</p>
-                  <p className="font-bold text-slate-900">{user?.email || 'Not Logged In'}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold">
+                <div className="p-3 bg-paper rounded-xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                  <p className="text-slate-600 mb-1 dark:text-slate-400">Current User</p>
+                  <p className="font-black text-slate-900 dark:text-white uppercase tracking-tighter truncate">{user?.email || 'Not Logged In'}</p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p className="text-slate-500 mb-1">Admin Status (UI)</p>
-                  <p className={`font-bold ${isAuthorized ? 'text-green-600' : 'text-red-600'}`}>
+                <div className="p-3 bg-paper rounded-xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                  <p className="text-slate-600 mb-1 dark:text-slate-400">Admin Status (UI)</p>
+                  <p className={`font-black uppercase tracking-widest ${isAuthorized ? 'text-green-600' : 'text-red-600'}`}>
                     {isAuthorized ? 'Authorized' : 'Unauthorized'}
                   </p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p className="text-slate-500 mb-1">Database Connection</p>
-                  <p className="font-bold text-green-600">Connected</p>
+                <div className="p-3 bg-paper rounded-xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+                  <p className="text-slate-600 mb-1 dark:text-slate-400">Database Connection</p>
+                  <p className="font-black text-green-600 uppercase tracking-widest">Connected</p>
                 </div>
               </div>
             </div>
             
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm border-l-4 border-l-blue-600">
+              <div className="bg-card p-6 rounded-2xl border border-slate-300 shadow-sm border-l-4 border-l-blue-600 dark:bg-card dark:border-slate-800">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-sm text-slate-500 mb-1">Total Revenue</p>
-                    <h3 className="text-2xl font-bold text-slate-900">₹{totalRevenue.toFixed(2)}</h3>
-                    <p className="text-xs text-slate-400 mt-2">Life time earnings</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-1">Total Revenue</p>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">₹{totalRevenue.toFixed(2)}</h3>
                   </div>
                   <DollarSign className="text-blue-600" size={20} />
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-xl border border-green-200 shadow-sm border-l-4 border-l-green-500">
+              <div className="bg-card p-6 rounded-2xl border border-slate-300 shadow-sm border-l-4 border-l-green-500 dark:bg-card dark:border-slate-800">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-sm text-slate-500 mb-1">Today's Sales</p>
-                    <h3 className="text-2xl font-bold text-slate-900">₹{todaySales.toFixed(2)}</h3>
-                    <p className="text-xs text-slate-400 mt-2">Revenue generated today</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-1">Today's Sales</p>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">₹{todaySales.toFixed(2)}</h3>
                   </div>
                   <Briefcase className="text-green-500" size={20} />
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-xl border border-amber-200 shadow-sm border-l-4 border-l-amber-500">
+              <div className="bg-card p-6 rounded-2xl border border-slate-300 shadow-sm border-l-4 border-l-amber-500 dark:bg-card dark:border-slate-800">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-sm text-slate-500 mb-1">Pending Orders</p>
-                    <h3 className="text-2xl font-bold text-slate-900">{pendingOrders}</h3>
-                    <p className="text-xs text-slate-400 mt-2">Requires attention</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-1">Pending Orders</p>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">{pendingOrders}</h3>
                   </div>
                   <PackageOpen className="text-amber-500" size={20} />
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-slate-400">
+              <div className="bg-card p-6 rounded-2xl border border-slate-300 shadow-sm border-l-4 border-l-slate-400 dark:bg-card dark:border-slate-800">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-sm text-slate-500 mb-1">Customer Files</p>
-                    <h3 className="text-2xl font-bold text-slate-900">{totalFiles}</h3>
-                    <p className="text-xs text-slate-400 mt-2">Total uploads received</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 mb-1">Customer Files</p>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter">{totalFiles}</h3>
                   </div>
                   <FileText className="text-slate-500" size={20} />
                 </div>
@@ -1409,17 +1479,17 @@ export default function AdminPanel() {
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
                       {product.galleryImages?.map((url: string, idx: number) => (
-                        <div key={idx} className="relative group aspect-square">
+                        <div key={idx} className="relative group aspect-square cursor-pointer" onClick={() => setAsPrimaryDirect(product.id, url)}>
                           <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${product.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
                             <button 
-                              onClick={() => setAsPrimaryDirect(product.id, url)}
+                              onClick={(e) => { e.stopPropagation(); setAsPrimaryDirect(product.id, url); }}
                               className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
                             >
                               Primary
                             </button>
                             <button 
-                              onClick={() => removeGalleryImage(product.id, url)}
+                              onClick={(e) => { e.stopPropagation(); removeGalleryImage(product.id, url); }}
                               className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
                             >
                               Remove
@@ -1428,9 +1498,9 @@ export default function AdminPanel() {
                         </div>
                       ))}
                       
-                      <div className="relative border-2 border-dashed border-slate-200 rounded-lg h-full aspect-square flex flex-col items-center justify-center hover:bg-slate-50 transition-colors cursor-pointer">
+                      <div className="relative border-2 border-dashed border-slate-200 rounded-lg h-full aspect-square flex flex-col items-center justify-center hover:bg-slate-50 transition-colors cursor-pointer p-2">
                         <Upload size={20} className="text-slate-400 mb-1" />
-                        <span className="text-[10px] text-slate-500 font-bold">{uploadingGallery ? 'Uploading...' : 'Add Images'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold text-center">{uploadingGallery ? 'Uploading...' : 'Batch Upload (Requires Storage)'}</span>
                         <input 
                           type="file" 
                           multiple 
@@ -1441,7 +1511,27 @@ export default function AdminPanel() {
                         />
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 italic">These images will be displayed as thumbnails on the product details page.</p>
+                    
+                    <div className="flex gap-2 w-full max-w-sm">
+                      <input type="url" id={`gallery-url-${product.id}`} placeholder="Or add image via URL" className="flex-1 p-2 border border-slate-200 rounded-lg text-xs" />
+                      <button onClick={async () => {
+                        const el = document.getElementById(`gallery-url-${product.id}`) as HTMLInputElement;
+                        if(el && el.value) {
+                          try {
+                            await updateDoc(doc(db, 'products', product.id), {
+                              galleryImages: arrayUnion(el.value),
+                              adminKey: 'Ammu@6231'
+                            });
+                            el.value = '';
+                            fetchData();
+                          } catch (err: any) {
+                            setActionMessage({ type: 'error', text: 'Error adding URL: ' + err.message });
+                          }
+                        }
+                      }} className="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold">Add URL</button>
+                    </div>
+                    
+                    <p className="text-xs text-slate-500 italic mt-3">These images will be displayed as thumbnails on the product details page.</p>
                   </div>
                 </div>
               ))}
@@ -1954,62 +2044,78 @@ export default function AdminPanel() {
                 {actionMessage.text}
               </div>
             )}
-            <input type="text" value={newProduct.title} onChange={e => setNewProduct({...newProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
-            <textarea value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
-            <input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
-            <select value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="text" value={newProduct.title || ''} onChange={e => setNewProduct({...newProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
+            <textarea value={newProduct.description || ''} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
+            <input type="number" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
+            <select value={newProduct.category || 'PVC CARDS'} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="PVC CARDS">PVC CARDS</option>
               <option value="PHOTOS">PHOTOS</option>
               <option value="DOCUMENTS">DOCUMENTS</option>
             </select>
             
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
-              {newProduct.imageUrl ? (
-                <div className="relative inline-block">
-                  <img src={newProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
-                  <button type="button" onClick={() => setNewProduct({...newProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Upload className="mx-auto text-slate-400" size={24} />
-                  <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload main image'}</p>
-                </div>
-              )}
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={(e) => handleImageUpload(e, true)} 
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={uploadingImage}
-              />
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Main Image</label>
+              <input type="url" placeholder="Or enter Image URL (e.g. from Unsplash or Imgur)" value={newProduct.imageUrl || ''} onChange={(e) => setNewProduct({...newProduct, imageUrl: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm mb-2" />
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
+                {newProduct.imageUrl ? (
+                  <div className="relative inline-block z-20">
+                    <img src={newProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
+                    <button type="button" onClick={() => setNewProduct({...newProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Upload className="mx-auto text-slate-400" size={24} />
+                    <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload main image (Requires Firebase Storage)'}</p>
+                  </div>
+                )}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => handleImageUpload(e, true)} 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={uploadingImage}
+                />
+              </div>
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-bold text-slate-700">Product Gallery</label>
-                <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1">
-                  <Upload size={12} />
-                  {uploadingGallery ? 'Uploading...' : 'Add Gallery Images'}
-                  <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, true)} disabled={uploadingGallery} />
-                </label>
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-bold text-slate-700">Product Gallery</label>
+                  <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1 leading-none h-8 w-fit shrink-0">
+                    <Upload size={12} />
+                    {uploadingGallery ? 'Uploading...' : 'Batch Upload (Requires Storage)'}
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, true)} disabled={uploadingGallery} />
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <input type="url" id="add-gallery-url" placeholder="Add single Image URL to gallery" className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" />
+                  <button type="button" onClick={() => {
+                    const el = document.getElementById('add-gallery-url') as HTMLInputElement;
+                    if(el && el.value) {
+                      setNewProduct({...newProduct, galleryImages: [...(newProduct.galleryImages || []), el.value]});
+                      el.value = '';
+                    }
+                  }} className="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold">Add URL</button>
+                </div>
               </div>
               
               <div className="grid grid-cols-4 gap-3">
                 {newProduct.galleryImages?.map((url: string, idx: number) => (
-                  <div key={idx} className="relative group aspect-square">
+                  <div key={idx} className="relative group aspect-square cursor-pointer" onClick={() => setAsPrimary(url, true)}>
                     <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${newProduct.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
                       <button 
                         type="button"
-                        onClick={() => setAsPrimary(url, true)}
+                        onClick={(e) => { e.stopPropagation(); setAsPrimary(url, true); }}
                         className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
                       >
                         Primary
                       </button>
                       <button 
                         type="button"
-                        onClick={() => removeFormGalleryImage(url, true)}
+                        onClick={(e) => { e.stopPropagation(); removeFormGalleryImage(url, true); }}
                         className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
                       >
                         Remove
@@ -2027,7 +2133,7 @@ export default function AdminPanel() {
 
             <div className="flex gap-4 pt-4">
               <button type="button" onClick={() => setNewProduct(null)} className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-              <button type="submit" disabled={uploadingImage} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Add Product</button>
+              <button type="submit" disabled={uploadingImage || uploadingGallery} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Add Product</button>
             </div>
           </form>
         </div>
@@ -2047,62 +2153,78 @@ export default function AdminPanel() {
                 {actionMessage.text}
               </div>
             )}
-            <input type="text" value={editingProduct.title} onChange={e => setEditingProduct({...editingProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
-            <textarea value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
-            <input type="number" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
-            <select value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="text" value={editingProduct.title || ''} onChange={e => setEditingProduct({...editingProduct, title: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Title" required />
+            <textarea value={editingProduct.description || ''} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" required rows={3} />
+            <input type="number" value={editingProduct.price || ''} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Price" required />
+            <select value={editingProduct.category || 'PVC CARDS'} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
               <option value="PVC CARDS">PVC CARDS</option>
               <option value="PHOTOS">PHOTOS</option>
               <option value="DOCUMENTS">DOCUMENTS</option>
             </select>
 
-            <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
-              {editingProduct.imageUrl ? (
-                <div className="relative inline-block">
-                  <img src={editingProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
-                  <button type="button" onClick={() => setEditingProduct({...editingProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Upload className="mx-auto text-slate-400" size={24} />
-                  <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload new image'}</p>
-                </div>
-              )}
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={(e) => handleImageUpload(e, false)} 
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={uploadingImage}
-              />
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-700">Main Image</label>
+              <input type="url" placeholder="Or enter Image URL (e.g. from Unsplash or Imgur)" value={editingProduct.imageUrl || ''} onChange={(e) => setEditingProduct({...editingProduct, imageUrl: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm mb-2" />
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center relative hover:bg-slate-50 transition-colors">
+                {editingProduct.imageUrl ? (
+                  <div className="relative inline-block z-20">
+                    <img src={editingProduct.imageUrl} alt="Preview" className="h-32 object-contain rounded" referrerPolicy="no-referrer" />
+                    <button type="button" onClick={() => setEditingProduct({...editingProduct, imageUrl: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-sm hover:bg-red-600">×</button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-blue-600/80 text-white text-[10px] font-bold py-1 rounded-b">Primary Image</div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Upload className="mx-auto text-slate-400" size={24} />
+                    <p className="text-sm text-slate-500">{uploadingImage ? 'Uploading...' : 'Click to upload main image (Requires Firebase Storage)'}</p>
+                  </div>
+                )}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => handleImageUpload(e, false)} 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={uploadingImage}
+                />
+              </div>
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-bold text-slate-700">Product Gallery</label>
-                <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1">
-                  <Upload size={12} />
-                  {uploadingGallery ? 'Uploading...' : 'Add Gallery Images'}
-                  <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, false)} disabled={uploadingGallery} />
-                </label>
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-bold text-slate-700">Product Gallery</label>
+                  <label className="cursor-pointer bg-blue-50 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1 leading-none h-8 w-fit shrink-0">
+                    <Upload size={12} />
+                    {uploadingGallery ? 'Uploading...' : 'Batch Upload (Requires Storage)'}
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={(e) => handleFormGalleryUpload(e, false)} disabled={uploadingGallery} />
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <input type="url" id="edit-gallery-url" placeholder="Add single Image URL to gallery" className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" />
+                  <button type="button" onClick={() => {
+                    const el = document.getElementById('edit-gallery-url') as HTMLInputElement;
+                    if(el && el.value) {
+                      setEditingProduct({...editingProduct, galleryImages: [...(editingProduct.galleryImages || []), el.value]});
+                      el.value = '';
+                    }
+                  }} className="bg-slate-200 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold">Add URL</button>
+                </div>
               </div>
               
               <div className="grid grid-cols-4 gap-3">
                 {editingProduct.galleryImages?.map((url: string, idx: number) => (
-                  <div key={idx} className="relative group aspect-square">
+                  <div key={idx} className="relative group aspect-square cursor-pointer" onClick={() => setAsPrimary(url, false)}>
                     <img src={url} alt={`Gallery ${idx}`} className={`w-full h-full object-cover rounded-lg border ${editingProduct.imageUrl === url ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`} referrerPolicy="no-referrer" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center gap-1">
                       <button 
                         type="button"
-                        onClick={() => setAsPrimary(url, false)}
+                        onClick={(e) => { e.stopPropagation(); setAsPrimary(url, false); }}
                         className="bg-blue-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-blue-700"
                       >
                         Primary
                       </button>
                       <button 
                         type="button"
-                        onClick={() => removeFormGalleryImage(url, false)}
+                        onClick={(e) => { e.stopPropagation(); removeFormGalleryImage(url, false); }}
                         className="bg-red-600 text-white text-[8px] font-bold px-2 py-1 rounded hover:bg-red-700"
                       >
                         Remove
@@ -2120,7 +2242,7 @@ export default function AdminPanel() {
 
             <div className="flex gap-4 pt-4">
               <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-              <button type="submit" disabled={uploadingImage} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Save Changes</button>
+              <button type="submit" disabled={uploadingImage || uploadingGallery} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">Save Changes</button>
             </div>
           </form>
         </div>
@@ -2220,6 +2342,7 @@ export default function AdminPanel() {
                   <p className="text-sm text-slate-500">{uploadingOrderFile ? 'Uploading...' : '+ Upload File (Design, Document, etc.)'}</p>
                   <input 
                     type="file" 
+                    multiple
                     onChange={(e) => handleOrderFileUpload(e, false)} 
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     disabled={uploadingOrderFile}
@@ -2270,6 +2393,7 @@ export default function AdminPanel() {
                   <p className="text-sm text-green-600 font-bold">{uploadingOrderFile ? 'Uploading...' : '+ Upload Processed File (Final Print/Design)'}</p>
                   <input 
                     type="file" 
+                    multiple
                     onChange={(e) => handleOrderFileUpload(e, false, true)} 
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     disabled={uploadingOrderFile}
@@ -2350,6 +2474,7 @@ export default function AdminPanel() {
                     </button>
                     <input 
                       type="file" 
+                      multiple
                       onChange={(e) => handleOrderFileUpload(e, true)} 
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={uploadingOrderFile}
@@ -2359,10 +2484,34 @@ export default function AdminPanel() {
                 {viewingOrder.files && viewingOrder.files.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {viewingOrder.files.map((file: any, index: number) => (
-                      <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100">
-                        <FileText size={14} />
-                        <span className="truncate max-w-[150px]">{file.name}</span>
-                      </a>
+                      <div key={index} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-100">
+                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:bg-blue-100 transition-colors">
+                          <FileText size={14} />
+                          <span className="truncate max-w-[150px]">{file.name}</span>
+                        </a>
+                        <button 
+                          type="button" 
+                          onClick={async () => {
+                            if (window.confirm('Remove this customer file?')) {
+                              const newFiles = viewingOrder.files.filter((_: any, i: number) => i !== index);
+                              try {
+                                await updateDoc(doc(db, 'orders', viewingOrder.id), {
+                                  files: newFiles,
+                                  adminKey: 'Ammu@6231'
+                                });
+                                setViewingOrder({ ...viewingOrder, files: newFiles });
+                                fetchData();
+                              } catch (error) {
+                                console.error("Error removing file:", error);
+                                alert("Failed to remove file.");
+                              }
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded ml-1"
+                        >
+                          X
+                        </button>
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -2380,6 +2529,7 @@ export default function AdminPanel() {
                     </button>
                     <input 
                       type="file" 
+                      multiple
                       onChange={(e) => handleOrderFileUpload(e, true, true)} 
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={uploadingOrderFile}
@@ -2389,10 +2539,34 @@ export default function AdminPanel() {
                 {viewingOrder.processedFiles && viewingOrder.processedFiles.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {viewingOrder.processedFiles.map((file: any, index: number) => (
-                      <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-100 transition-colors border border-green-100">
-                        <ShieldCheck size={14} />
-                        <span className="truncate max-w-[150px]">{file.name}</span>
-                      </a>
+                      <div key={index} className="flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1.5 rounded-lg text-xs font-medium border border-green-100">
+                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:bg-green-100 transition-colors">
+                          <ShieldCheck size={14} />
+                          <span className="truncate max-w-[150px]">{file.name}</span>
+                        </a>
+                        <button 
+                          type="button" 
+                          onClick={async () => {
+                            if (window.confirm('Remove this processed file?')) {
+                              const newProcessedFiles = viewingOrder.processedFiles.filter((_: any, i: number) => i !== index);
+                              try {
+                                await updateDoc(doc(db, 'orders', viewingOrder.id), {
+                                  processedFiles: newProcessedFiles,
+                                  adminKey: 'Ammu@6231'
+                                });
+                                setViewingOrder({ ...viewingOrder, processedFiles: newProcessedFiles });
+                                fetchData();
+                              } catch (error) {
+                                console.error("Error removing file:", error);
+                                alert("Failed to remove file.");
+                              }
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded ml-1"
+                        >
+                          X
+                        </button>
+                      </div>
                     ))}
                   </div>
                 ) : (

@@ -107,15 +107,17 @@ export default function DocumentPrintingPage() {
         setFiles(prev => prev.map(f => f.id === fileId ? { ...f, thumbnail } : f));
       }
     } catch (error: any) {
-      console.error('Error processing PDF:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.log('Error type:', typeof error, 'Error:', error);
       
       const isPasswordError = 
         (error && typeof error === 'object' && 'name' in error && error.name === 'PasswordException') ||
         errorMessage.toLowerCase().includes('password') ||
         errorMessage.toLowerCase().includes('no password given');
 
+      if (!isPasswordError) {
+        console.error('Error processing PDF:', error);
+      }
+      
       if (isPasswordError) {
         if (password) {
           alert('Incorrect password. Please try again.');
@@ -394,7 +396,7 @@ export default function DocumentPrintingPage() {
       <div className="grid lg:grid-cols-3 gap-12">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-12">
-          <div className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 lg:p-10 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-accent-blue/5 text-accent-blue rounded-2xl flex items-center justify-center font-black text-xl">1</div>
               <h2 className="text-2xl font-black font-headline tracking-tight text-ink">Upload Documents</h2>
@@ -443,7 +445,7 @@ export default function DocumentPrintingPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="font-black text-xl text-ink">Drag & Drop or Click</p>
-                  <p className="text-slate-400 font-bold text-sm">PDF, DOCX, JPG, PNG — A4 size recommended</p>
+                  <p className="text-slate-700 font-bold text-sm dark:text-slate-400">PDF, DOCX, JPG, PNG — A4 size recommended</p>
                 </div>
                 <button className="bg-accent-amber text-ink px-8 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg shadow-amber-200">
                   <Plus size={18} />
@@ -483,8 +485,12 @@ export default function DocumentPrintingPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4 overflow-hidden flex-1">
-                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-slate-100">
-                              {file.thumbnail ? (
+                            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-slate-100 relative">
+                              {file.needsPassword ? (
+                                <div className="absolute inset-0 bg-red-50 flex items-center justify-center" title="Password Protected">
+                                  <Lock className="text-red-500" size={24} />
+                                </div>
+                              ) : file.thumbnail ? (
                                 <img src={file.thumbnail} alt="Preview" className="w-full h-full object-cover" />
                               ) : (
                                 file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') ? (
@@ -545,8 +551,11 @@ export default function DocumentPrintingPage() {
                                 {file.status === 'done' ? 'Upload Complete' : 
                                  file.status === 'error' ? 'Upload Failed' : 
                                  file.status === 'processing' ? 'Processing Document...' :
-                                 `Uploading to Cloud... ${Math.round(file.progress || 0)}%`}
+                                 'Uploading to Cloud...'}
                               </span>
+                              {file.status === 'uploading' && (
+                                <span className="text-accent-blue">{Math.round(file.progress || 0)}%</span>
+                              )}
                               {file.status === 'error' && (
                                 <button onClick={() => uploadFile(file as any)} className="text-red-600 hover:underline font-bold">Retry Upload</button>
                               )}
@@ -615,19 +624,19 @@ export default function DocumentPrintingPage() {
             </AnimatePresence>
           </div>
           
-          <div className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 lg:p-10 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-accent-blue/5 text-accent-blue rounded-2xl flex items-center justify-center font-black text-xl">3</div>
               <h2 className="text-2xl font-black font-headline tracking-tight text-ink">Security & Instructions</h2>
             </div>
             <div className="grid md:grid-cols-2 gap-8">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">File Password (if any)</label>
-                <input type="text" placeholder="Type file password here..." className="w-full p-5 rounded-2xl border-slate-200 focus:border-accent-blue focus:ring-0 transition-all bg-slate-50/50" />
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 dark:text-slate-400">File Password (if any)</label>
+                <input type="text" placeholder="Type file password here..." className="w-full p-5 rounded-2xl border-slate-300 focus:border-accent-blue focus:ring-0 transition-all bg-card dark:border-slate-800 dark:bg-slate-900" />
               </div>
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Special Instructions</label>
-                <textarea placeholder="e.g. Print page 1-10 only..." className="w-full p-5 rounded-2xl border-slate-200 focus:border-accent-blue focus:ring-0 transition-all bg-slate-50/50 h-[60px]" />
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 dark:text-slate-400">Special Instructions</label>
+                <textarea placeholder="e.g. Print page 1-10 only..." className="w-full p-5 rounded-2xl border-slate-300 focus:border-accent-blue focus:ring-0 transition-all bg-card h-[60px] dark:border-slate-800 dark:bg-slate-900" />
               </div>
             </div>
           </div>
@@ -635,7 +644,7 @@ export default function DocumentPrintingPage() {
 
         {/* Right Column */}
         <div className="space-y-8">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 bg-accent-blue/5 text-accent-blue rounded-xl flex items-center justify-center font-black text-lg">2</div>
               <h2 className="text-xl font-black font-headline tracking-tight text-ink">Printing Options</h2>

@@ -4,12 +4,12 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useCart } from './context/CartContext';
 import { 
   ShieldCheck, ShieldAlert, ShoppingBasket, Search, 
   Menu, X, ChevronRight, Phone, Mail, MapPin,
-  Clock, Zap, ArrowRight, ShoppingBag, Settings, Lock, MessageCircle
+  Clock, Zap, ArrowRight, ShoppingBag, Settings, Lock, MessageCircle, Monitor
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -42,8 +42,11 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import NotFoundPage from './pages/NotFoundPage';
+import KioskPage from './pages/KioskPage';
 import SecurityBadgeSection from './components/SecurityBadgeSection';
 import SlideOutCart from './components/SlideOutCart';
+import ThemeToggle from './components/ThemeToggle';
+import ScrollToTopButton from './components/ScrollToTopButton';
 
 function Layout({ children, user }: { children: React.ReactNode, user: any }) {
   const { cart, setIsCartOpen } = useCart();
@@ -75,8 +78,10 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-surface font-body text-on-surface antialiased flex flex-col">
+    <div className="min-h-screen bg-paper font-body text-ink antialiased flex flex-col transition-colors duration-300">
+      <ThemeToggle />
       <SlideOutCart />
+      <ScrollToTopButton />
       {/* TopNavBar */}
       <div className="bg-red-600 text-white text-center py-1.5 text-[10px] font-black uppercase tracking-[0.2em] z-[60] fixed top-0 w-full shadow-sm">
         <Link to="/disclaimer" className="animate-blink hover:underline flex items-center justify-center gap-2">
@@ -85,8 +90,8 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
         </Link>
       </div>
       <nav className={`fixed left-0 right-0 z-50 px-4 md:px-8 transition-all duration-300 ${isScrolled ? 'top-0 py-2' : 'top-7 py-0'}`}>
-        <div className={`max-w-7xl mx-auto glass rounded-3xl shadow-[0_8px_32px_0_rgba(15,23,42,0.08)] flex justify-between items-center px-6 transition-all duration-300 ${isScrolled ? 'py-2.5' : 'py-3'}`}>
-          <Link to="/" className="text-2xl font-black text-accent-blue font-headline tracking-tighter flex items-center gap-2">
+        <div className={`max-w-7xl mx-auto bg-card border border-slate-300 rounded-3xl shadow-xl flex justify-between items-center px-6 transition-all duration-300 dark:bg-slate-900 dark:border-slate-800 ${isScrolled ? 'py-2.5' : 'py-3'}`}>
+          <Link to="/" className="text-2xl font-black text-ink font-headline tracking-tighter flex items-center gap-2 dark:text-white">
             <div className="w-8 h-8 bg-accent-blue rounded-xl flex items-center justify-center text-white rotate-12">
               <ShieldCheck size={20} />
             </div>
@@ -94,42 +99,48 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
           </Link>
           
           {/* Desktop Menu */}
-          <div className="hidden lg:flex items-center gap-8 font-headline font-bold text-slate-500 text-sm tracking-tight">
-            <Link to="/" className="hover:text-accent-blue transition-colors">Home</Link>
-            <Link to="/document-printing" className="hover:text-accent-blue transition-colors">Printing</Link>
-            <Link to="/pvc-cards" className="hover:text-accent-blue transition-colors">PVC Cards</Link>
-            <Link to="/photos" className="hover:text-accent-blue transition-colors">Photos</Link>
+          <div className="hidden lg:flex items-center gap-8 font-headline font-bold text-slate-700 text-sm tracking-tight dark:text-slate-300">
+            <Link to="/" className="hover:text-accent-blue transition-colors dark:hover:text-white">Home</Link>
+            <Link to="/document-printing" className="hover:text-accent-blue transition-colors dark:hover:text-white">Printing</Link>
+            <Link to="/pvc-cards" className="hover:text-accent-blue transition-colors dark:hover:text-white">PVC Cards</Link>
+            <Link to="/photos" className="hover:text-accent-blue transition-colors dark:hover:text-white">Photos</Link>
+            <Link to="/kiosk" className="hover:text-accent-blue transition-colors dark:hover:text-white flex items-center gap-1.5"><Monitor size={14} className="text-accent-blue"/> Kiosk</Link>
             
             {/* Search Bar */}
             <div className="relative group">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-accent-blue transition-colors" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-ink transition-colors dark:group-focus-within:text-white" />
               <input 
                 type="text" 
                 placeholder="Search services..." 
-                className="bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-accent-blue/20 w-40 focus:w-60 transition-all outline-none"
+                className="bg-slate-100 text-ink placeholder-slate-400 border-none rounded-xl pl-10 pr-4 py-2 text-xs focus:ring-2 focus:ring-accent-blue/50 w-40 focus:w-60 transition-all outline-none dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Mobile Menu Button */}
-            <button className="lg:hidden p-2 text-slate-600" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            <button 
+              className="lg:hidden p-2.5 bg-slate-100 text-ink rounded-xl border border-slate-200 hover:bg-slate-200 transition-all focus:ring-2 focus:ring-accent-blue/50 outline-none flex items-center justify-center shadow-sm dark:bg-slate-800 dark:text-white dark:border-slate-700" 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMenuOpen}
+            >
+              {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
 
             <div className="hidden lg:flex items-center gap-4">
               {user?.email === adminEmail && (
-                <Link to="/admin" className="flex items-center gap-1.5 text-slate-600 hover:text-accent-blue font-bold text-sm">
+                <Link to="/admin" className="flex items-center gap-1.5 text-slate-500 hover:text-ink font-bold text-sm dark:text-slate-300 dark:hover:text-white">
                   <Settings size={16} />
                   Admin
                 </Link>
               )}
               {user ? (
-                <Link to="/dashboard" className="flex items-center gap-2 bg-slate-100 text-slate-900 px-4 py-2 rounded-2xl hover:bg-slate-200 transition-all font-bold text-sm">
+                <Link to="/dashboard" className="flex items-center gap-2 bg-slate-100 text-ink px-4 py-2 rounded-2xl hover:bg-slate-200 transition-all font-bold text-sm dark:bg-slate-800 dark:text-white">
                   Account
                 </Link>
               ) : (
-                <Link to="/login" className="text-slate-600 hover:text-accent-blue font-bold text-sm">Login</Link>
+                <Link to="/login" className="text-slate-500 hover:text-ink font-bold text-sm dark:text-slate-300 dark:hover:text-white">Login</Link>
               )}
               <button 
                 onClick={() => setIsCartOpen(true)}
@@ -149,23 +160,24 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="lg:hidden mt-2 glass rounded-3xl p-6 shadow-xl space-y-4 font-bold text-slate-700">
-            <Link to="/" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Home</Link>
-            <Link to="/document-printing" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Printing</Link>
-            <Link to="/pvc-cards" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>PVC Cards</Link>
-            <Link to="/photos" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Photos</Link>
-            <Link to="/track-order" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Track Order</Link>
-            <hr className="border-slate-200" />
+          <div className="lg:hidden mt-2 bg-card border border-slate-200 rounded-3xl p-6 shadow-xl space-y-4 font-bold text-slate-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300">
+            <Link to="/" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Home</Link>
+            <Link to="/document-printing" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Printing</Link>
+            <Link to="/pvc-cards" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>PVC Cards</Link>
+            <Link to="/photos" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Photos</Link>
+            <Link to="/kiosk" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Kiosk</Link>
+            <Link to="/track-order" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Track Order</Link>
+            <hr className="border-slate-200 dark:border-slate-800" />
             {user?.email === adminEmail && (
-              <Link to="/admin" className="flex items-center gap-2 hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>
+              <Link to="/admin" className="flex items-center gap-2 hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>
                 <Settings size={18} />
                 Admin Panel
               </Link>
             )}
             {user ? (
-              <Link to="/dashboard" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Account</Link>
+              <Link to="/dashboard" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Account</Link>
             ) : (
-              <Link to="/login" className="block hover:text-accent-blue" onClick={() => setIsMenuOpen(false)}>Login</Link>
+              <Link to="/login" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Login</Link>
             )}
             <button 
               className="block text-accent-blue font-black w-full text-left" 
@@ -184,74 +196,77 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
         {children}
       </main>
 
-      <footer className="bg-ink text-white py-20 mt-20">
+      <footer className="bg-[#2563EB] text-white py-20 mt-20 border-t border-blue-400 dark:bg-[#1E40AF]">
         <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-12">
           <div className="space-y-6">
             <div className="flex items-center gap-2 text-2xl font-black font-headline tracking-tighter">
-              <div className="w-8 h-8 bg-accent-blue rounded-xl flex items-center justify-center text-white rotate-12">
+              <div className="w-8 h-8 bg-white text-[#2563EB] rounded-xl flex items-center justify-center rotate-12">
                 <ShieldCheck size={20} />
               </div>
-              <span>M S STAR XEROX</span>
+              <span className="text-white">M S STAR XEROX</span>
             </div>
-            <p className="text-slate-400 text-sm leading-relaxed font-medium">
+            <p className="text-blue-100 text-sm leading-relaxed font-bold">
               Premium printing services for documents, PVC cards, and photos. 
               Quality you can feel, speed you can trust. Located in Gunjur, Bangalore.
             </p>
             <div className="flex gap-4">
-              <a href="https://wa.me/919901526231" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-accent-blue transition-colors text-white">
+              <Link to="/kiosk" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors" title="MS STAR Kiosk App">
+                <Monitor size={18} />
+              </Link>
+              <a href="https://wa.me/919901526231" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors">
                 <MessageCircle size={18} />
               </a>
-              <a href="tel:+919148868257" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-accent-blue transition-colors text-white">
+              <a href="tel:+919148868257" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors">
                 <Phone size={18} />
               </a>
-              <a href="mailto:msgunjur@gmail.com" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-accent-blue transition-colors text-white">
+              <a href="mailto:msgunjur@gmail.com" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors">
                 <Mail size={18} />
               </a>
             </div>
           </div>
           
           <div className="space-y-6">
-            <h4 className="font-black text-sm uppercase tracking-widest text-accent-amber">Company</h4>
-            <ul className="space-y-3 text-slate-400 text-sm font-bold">
-              <li><Link to="/about-us" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> About Us</Link></li>
-              <li><Link to="/contact-us" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Contact Us</Link></li>
-              <li><Link to="/faq" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> FAQ</Link></li>
-              <li><Link to="/track-order" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Track Order</Link></li>
+            <h4 className="font-black text-sm uppercase tracking-widest text-blue-200">Company</h4>
+            <ul className="space-y-3 text-white text-sm font-black">
+              <li><Link to="/about-us" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> About Us</Link></li>
+              <li><Link to="/contact-us" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Contact Us</Link></li>
+              <li><Link to="/faq" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> FAQ</Link></li>
+              <li><Link to="/track-order" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Track Order</Link></li>
             </ul>
           </div>
 
           <div className="space-y-6">
-            <h4 className="font-black text-sm uppercase tracking-widest text-accent-amber">Legal</h4>
-            <ul className="space-y-3 text-slate-400 text-sm font-bold">
-              <li><Link to="/privacy-policy" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Privacy Policy</Link></li>
-              <li><Link to="/terms-conditions" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Terms & Conditions</Link></li>
-              <li><Link to="/refund-cancellation" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Refund/Cancellation Policy</Link></li>
-              <li><Link to="/shipping-policy" className="hover:text-white transition-colors flex items-center gap-2"><ChevronRight size={14} className="text-accent-blue"/> Shipping Policy</Link></li>
+            <h4 className="font-black text-sm uppercase tracking-widest text-blue-200">Legal</h4>
+            <ul className="space-y-3 text-white text-sm font-black">
+              <li><Link to="/privacy-policy" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Privacy Policy</Link></li>
+              <li><Link to="/terms-conditions" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Terms & Conditions</Link></li>
+              <li><Link to="/refund-cancellation" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Refund/Cancellation Policy</Link></li>
+              <li><Link to="/shipping-policy" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Shipping Policy</Link></li>
             </ul>
           </div>
 
           <div className="space-y-6">
-            <h4 className="font-black text-sm uppercase tracking-widest text-accent-amber">Contact</h4>
-            <ul className="space-y-4 text-slate-400 text-sm font-bold">
+            <h4 className="font-black text-sm uppercase tracking-widest text-blue-200">Contact</h4>
+            <ul className="space-y-4 text-white text-sm font-black">
               <li className="flex items-start gap-3">
-                <MapPin size={18} className="text-accent-blue shrink-0 mt-0.5" />
+                <MapPin size={18} className="text-blue-200 shrink-0 mt-0.5" />
                 <span>M S STAR XEROX<br/>no 247 gunjur bangalore 560087</span>
               </li>
               <li className="flex items-center gap-3">
-                <Phone size={18} className="text-accent-blue shrink-0" />
+                <Phone size={18} className="text-blue-200 shrink-0" />
                 <span>+91 9148868257<br/>+91 9901526231</span>
               </li>
               <li className="flex items-center gap-3">
-                <Mail size={18} className="text-accent-blue shrink-0" />
+                <Mail size={18} className="text-blue-200 shrink-0" />
                 <span>msgunjur@gmail.com</span>
               </li>
             </ul>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-6 pt-12 mt-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 text-slate-500 text-xs font-bold">
+        <div className="max-w-7xl mx-auto px-6 pt-12 mt-12 border-t border-white/20 flex flex-col md:flex-row justify-between items-center gap-6 text-blue-200 text-xs font-bold">
           <div className="flex items-center gap-3">
             <p>© 2026 M S STAR XEROX. ALL RIGHTS RESERVED.</p>
-            <Link to="/admin" className="text-white/10 hover:text-white/40 transition-colors" title="Admin Login">
+            <Link to="/admin" className="text-white/20 hover:text-white/50 transition-colors" title="Admin Login">
               <Lock size={12} />
             </Link>
           </div>
@@ -320,6 +335,7 @@ export default function App() {
             <Route path="/quality-terms" element={<QualityTermsPage />} />
             <Route path="/disclaimer" element={<DisclaimerPage />} />
             <Route path="/faq" element={<FaqPage />} />
+            <Route path="/kiosk" element={<KioskPage />} />
             <Route path="/dashboard" element={<UserDashboardPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />

@@ -12,9 +12,8 @@ export default function PhotosPage() {
   const [background, setBackground] = useState<string | null>(null);
   const [copies, setCopies] = useState(1);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'processing' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,9 +38,8 @@ export default function PhotosPage() {
       const file = e.target.files[0];
       setPhotoFile(file);
       setUploadedUrl(null);
-      setIsUploading(true);
+      setUploadStatus('processing');
       setUploadProgress(0);
-      setUploadError(false);
 
       try {
         // 1. Aggressive compression for "Turbo" speed (target 200KB)
@@ -61,7 +59,7 @@ export default function PhotosPage() {
         const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
         // Ensure uploading state is active
-        setIsUploading(true);
+        setUploadStatus('uploading');
         setUploadProgress(0);
 
         // Safety Timeout: If stuck at 0% for 4 seconds, use local fallback
@@ -70,7 +68,7 @@ export default function PhotosPage() {
           uploadTask.cancel();
           const localUrl = URL.createObjectURL(file);
           setUploadedUrl(localUrl);
-          setIsUploading(false);
+          setUploadStatus('done');
           setUploadProgress(100);
         }, 4000);
 
@@ -91,21 +89,20 @@ export default function PhotosPage() {
             }
             const localUrl = URL.createObjectURL(file);
             setUploadedUrl(localUrl);
-            setIsUploading(false);
+            setUploadStatus('done');
             setUploadProgress(100);
           },
           async () => {
             clearTimeout(timeoutId);
             const url = await getDownloadURL(uploadTask.snapshot.ref);
             setUploadedUrl(url);
-            setIsUploading(false);
+            setUploadStatus('done');
             setUploadProgress(100);
           }
         );
       } catch (error) {
         console.error("Compression error:", error);
-        setUploadError(true);
-        setIsUploading(false);
+        setUploadStatus('error');
       }
     }
   };
@@ -195,7 +192,7 @@ export default function PhotosPage() {
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-12">
           {/* Upload */}
-          <div className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 lg:p-10 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-accent-blue/5 text-accent-blue rounded-2xl flex items-center justify-center font-black text-xl">1</div>
               <h2 className="text-2xl font-black font-headline tracking-tight text-ink">Upload Your Photo</h2>
@@ -224,7 +221,7 @@ export default function PhotosPage() {
                       </div>
                     </div>
                     <p className="font-black text-ink text-sm truncate max-w-[200px]">{photoFile.name}</p>
-                    {uploadError && (
+                    {uploadStatus === 'error' && (
                       <div className="w-48 mx-auto space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-red-500">
                           <span>Upload Failed</span>
@@ -237,23 +234,27 @@ export default function PhotosPage() {
                         </button>
                       </div>
                     )}
-                    {isUploading && (
+                    {(uploadStatus === 'uploading' || uploadStatus === 'processing' || uploadStatus === 'done') && (
                       <div className="w-48 mx-auto space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                          <span className="text-accent-blue">Uploading...</span>
-                          <span className="text-slate-400">{Math.round(uploadProgress)}%</span>
+                          <span className={uploadStatus === 'done' ? 'text-green-500' : uploadStatus === 'processing' ? 'text-purple-500' : 'text-accent-blue'}>
+                            {uploadStatus === 'done' ? 'Ready' : uploadStatus === 'processing' ? 'Processing...' : 'Uploading...'}
+                          </span>
+                          {uploadStatus === 'uploading' && <span className="text-slate-400">{Math.round(uploadProgress)}%</span>}
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden relative">
                           <motion.div 
                             initial={{ width: 0 }}
-                            animate={{ width: `${uploadProgress}%` }}
-                            className="h-full bg-accent-blue rounded-full relative"
+                            animate={{ width: uploadStatus === 'done' ? '100%' : `${uploadProgress}%` }}
+                            className={`h-full rounded-full relative ${uploadStatus === 'done' ? 'bg-green-500' : uploadStatus === 'processing' ? 'bg-purple-500' : 'bg-accent-blue'}`}
                           >
-                            <motion.div 
-                              animate={{ x: ['-100%', '100%'] }}
-                              transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                            />
+                            {(uploadStatus === 'uploading' || uploadStatus === 'processing') && (
+                              <motion.div 
+                                animate={{ x: ['-100%', '100%'] }}
+                                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                              />
+                            )}
                           </motion.div>
                         </div>
                       </div>
@@ -269,7 +270,7 @@ export default function PhotosPage() {
                     </div>
                     <div className="space-y-2">
                       <p className="font-black text-xl text-ink">Drag & Drop or Click</p>
-                      <p className="text-slate-400 font-bold text-sm">High resolution JPEG or PNG recommended</p>
+                      <p className="text-slate-700 font-bold text-sm dark:text-slate-400">High resolution JPEG or PNG recommended</p>
                     </div>
                     <button className="bg-accent-amber text-ink px-8 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg shadow-amber-200 pointer-events-none">
                       <Plus size={18} />
@@ -282,7 +283,7 @@ export default function PhotosPage() {
           </div>
 
           {/* Background */}
-          <div className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 lg:p-10 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-accent-blue/5 text-accent-blue rounded-2xl flex items-center justify-center font-black text-xl">2</div>
               <h2 className="text-2xl font-black font-headline tracking-tight text-ink">Background Color</h2>
@@ -309,7 +310,7 @@ export default function PhotosPage() {
           </div>
 
           {/* Packages */}
-          <div className="bg-white p-8 lg:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8">
+          <div className="bg-card p-8 lg:p-10 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-8 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-accent-blue/5 text-accent-blue rounded-2xl flex items-center justify-center font-black text-xl">3</div>
               <h2 className="text-2xl font-black font-headline tracking-tight text-ink">Choose Package</h2>
@@ -322,7 +323,7 @@ export default function PhotosPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
                   onClick={() => setSelectedPackage(pkg.name)}
-                  className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group ${selectedPackage === pkg.name ? 'border-accent-blue bg-accent-blue/5 shadow-xl shadow-accent-blue/5' : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'}`}
+                  className={`p-6 rounded-[2rem] border-2 text-left transition-all relative group ${selectedPackage === pkg.name ? 'border-accent-blue bg-accent-blue/5 shadow-xl shadow-accent-blue/5' : 'border-slate-300 hover:border-accent-blue/50 bg-card dark:bg-slate-900/50 dark:border-slate-800'}`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
@@ -375,21 +376,21 @@ export default function PhotosPage() {
               </div>
 
               <motion.button 
-                whileHover={{ scale: (selectedPackage && background && photoFile && !isUploading && uploadedUrl) ? 1.02 : 1 }}
-                whileTap={{ scale: (selectedPackage && background && photoFile && !isUploading && uploadedUrl) ? 0.98 : 1 }}
+                whileHover={{ scale: (selectedPackage && background && photoFile && uploadStatus === 'done' && uploadedUrl) ? 1.02 : 1 }}
+                whileTap={{ scale: (selectedPackage && background && photoFile && uploadStatus === 'done' && uploadedUrl) ? 0.98 : 1 }}
                 onClick={handleAddToCart}
-                disabled={!selectedPackage || !background || !photoFile || isUploading || !uploadedUrl}
+                disabled={!selectedPackage || !background || !photoFile || uploadStatus !== 'done' || !uploadedUrl}
                 className={`w-full py-5 rounded-2xl font-black text-lg text-center flex items-center justify-center gap-2 transition-all duration-300 ${
-                  selectedPackage && background && photoFile && !isUploading && uploadedUrl
+                  selectedPackage && background && photoFile && uploadStatus === 'done' && uploadedUrl
                     ? 'bg-accent-amber text-ink hover:bg-amber-500 shadow-[0_20px_50px_rgba(251,191,36,0.3)]' 
                     : 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/5'
                 }`}
               >
-                  {isUploading ? (
+                  {(uploadStatus === 'uploading' || uploadStatus === 'processing') ? (
                     <div className="flex flex-col items-center gap-2 w-full">
                       <div className="flex items-center gap-2">
                         <Loader2 className="animate-spin" size={20} />
-                        <span className="text-xs uppercase tracking-widest">Uploading...</span>
+                        <span className="text-xs uppercase tracking-widest">{uploadStatus === 'processing' ? 'Processing...' : 'Uploading...'}</span>
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-1 mt-1 overflow-hidden">
                         <div 
@@ -413,7 +414,7 @@ export default function PhotosPage() {
             <div className="absolute bottom-0 right-0 w-32 h-32 bg-accent-blue/20 blur-3xl rounded-full" />
           </div>
 
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+          <div className="bg-card p-8 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-6 dark:bg-card dark:border-slate-800">
             <div className="flex items-center gap-3 text-accent-blue">
               <Zap size={20} />
               <h4 className="font-black text-sm uppercase tracking-widest">Why Choose Us?</h4>
@@ -425,7 +426,7 @@ export default function PhotosPage() {
                 'Premium Matte/Glossy Paper',
                 'Doorstep Delivery'
               ].map(item => (
-                <li key={item} className="flex items-center gap-3 text-sm font-bold text-slate-500">
+                <li key={item} className="flex items-center gap-3 text-sm font-black text-slate-700 dark:text-slate-400">
                   <Check size={14} className="text-accent-blue" strokeWidth={4} />
                   {item}
                 </li>
@@ -436,10 +437,10 @@ export default function PhotosPage() {
       </div>
 
       {/* Sample Photos & Guidelines */}
-      <div className="bg-white p-8 lg:p-12 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-10">
+      <div className="bg-card p-8 lg:p-12 rounded-[2.5rem] border border-slate-300 shadow-sm space-y-10 dark:bg-card dark:border-slate-800">
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-black font-headline tracking-tight text-ink">Sample Photos & Guidelines</h2>
-          <p className="text-slate-500 font-medium max-w-2xl mx-auto">
+          <p className="text-slate-700 font-bold max-w-2xl mx-auto dark:text-slate-400">
             Check out our sample passport and stamp size photos. Please follow the photo guidelines to ensure the best quality print.
           </p>
         </div>
