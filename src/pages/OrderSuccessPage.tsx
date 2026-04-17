@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle2, Upload, FileText, ArrowRight, ShoppingBag, Loader2, Download } from 'lucide-react';
+import { CheckCircle2, Upload, FileText, ArrowRight, ShoppingBag, Loader2, Download, Phone, Clock, Truck } from 'lucide-react';
 import { db, storage } from '../firebase';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -186,49 +186,124 @@ export default function OrderSuccessPage() {
           </div>
         </div>
 
-        {/* File Upload Section */}
-        <div className="bg-blue-900 text-white p-8 rounded-[2.5rem] shadow-xl space-y-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-800 rounded-full -mr-16 -mt-16 opacity-50 blur-3xl" />
-          
-          <h2 className="text-2xl font-bold font-headline relative z-10">Upload Files</h2>
-          <p className="text-blue-100 text-sm relative z-10">
-            If you missed any files or want to add more documents for printing, you can upload them here.
-          </p>
-
-          <div className="space-y-4 relative z-10">
-            {order.files?.map((file: any, i: number) => (
-              <div key={i} className="flex items-center justify-between bg-white/10 p-3 rounded-xl border border-white/10">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <FileText size={18} className="text-blue-300 shrink-0" />
-                  <span className="truncate text-xs font-bold">{file.name}</span>
+        {/* Tracking & Delivery section */}
+        <div className="space-y-8">
+          {/* Tracking Details Card */}
+          {(order.status === 'shipped' || order.trackingNumber || order.estimatedDeliveryDate) && (
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold font-headline">Delivery Details</h2>
+                <div className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 italic">
+                  {order.status || 'Processing'}
                 </div>
-                <CheckCircle2 size={16} className="text-green-400 shrink-0" />
               </div>
-            ))}
 
-            <div className="relative group">
-              <input 
-                type="file" 
-                onChange={handleFileUpload}
-                disabled={uploading}
-                className="absolute inset-0 opacity-0 cursor-pointer z-20"
-              />
-              <div className={`border-2 border-dashed border-blue-400/50 rounded-2xl p-6 text-center transition-all ${uploading ? 'bg-blue-800/50' : 'group-hover:bg-blue-800/30'}`}>
-                {uploading ? (
-                  <div className="space-y-3">
-                    <Loader2 className="animate-spin mx-auto" size={24} />
-                    <p className="text-xs font-bold">Uploading... {Math.round(uploadProgress)}%</p>
-                    <div className="w-full bg-blue-950 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-blue-400 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+              <div className="space-y-6">
+                {order.estimatedDeliveryDate && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                      <Clock size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Est. Delivery</p>
+                      <p className="font-black text-slate-900">{order.estimatedDeliveryDate}</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Upload className="mx-auto text-blue-300" size={24} />
-                    <p className="text-sm font-bold">Add More Files</p>
-                    <p className="text-[10px] text-blue-300 uppercase tracking-widest font-black">PDF, Images, Docs</p>
+                )}
+
+                {order.trackingNumber && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+                      <Truck size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tracking Info</p>
+                      <p className="font-black text-slate-900">{order.courierName || 'Courier Service'}: {order.trackingNumber}</p>
+                      {order.trackingUrl && (
+                        <a 
+                          href={order.trackingUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                        >
+                          Track on Courier Website <ArrowRight size={12} />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {order.courierPhone && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-600 shrink-0">
+                      <Phone size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Courier Contact</p>
+                      <a href={`tel:${order.courierPhone}`} className="font-black text-slate-900 hover:text-blue-600 transition-colors">
+                        {order.courierPhone}
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {!order.trackingNumber && !order.estimatedDeliveryDate && (
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-xs font-bold text-slate-500 leading-relaxed italic">
+                      Tracking info will be updated once your order is dispatched. You can track your order using the link below anytime.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* File Upload Section */}
+          <div className="bg-blue-900 text-white p-8 rounded-[2.5rem] shadow-xl space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-800 rounded-full -mr-16 -mt-16 opacity-50 blur-3xl" />
+            
+            <h2 className="text-2xl font-bold font-headline relative z-10">Upload Files</h2>
+            <p className="text-blue-100 text-sm relative z-10 font-bold leading-relaxed">
+              If you missed any files or want to add more documents for printing, you can upload them here.
+            </p>
+
+            <div className="space-y-4 relative z-10">
+              {(order.files && order.files.length > 0) ? order.files.map((file: any, i: number) => (
+                <div key={i} className="flex items-center justify-between bg-white/10 p-3 rounded-xl border border-white/10">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <FileText size={18} className="text-blue-300 shrink-0" />
+                    <span className="truncate text-xs font-bold">{file.name}</span>
+                  </div>
+                  <CheckCircle2 size={16} className="text-green-400 shrink-0" />
+                </div>
+              )) : (
+                <div className="text-center py-2 opacity-50 italic text-xs font-bold">No files uploaded yet</div>
+              )}
+
+              <div className="relative group">
+                <input 
+                  type="file" 
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  className="absolute inset-0 opacity-0 cursor-pointer z-20"
+                />
+                <div className={`border-2 border-dashed border-blue-400/50 rounded-2xl p-6 text-center transition-all ${uploading ? 'bg-blue-800/50' : 'group-hover:bg-blue-800/30'}`}>
+                  {uploading ? (
+                    <div className="space-y-3">
+                      <Loader2 className="animate-spin mx-auto" size={24} />
+                      <p className="text-xs font-bold">Uploading... {Math.round(uploadProgress)}%</p>
+                      <div className="w-full bg-blue-950 h-1.5 rounded-full overflow-hidden">
+                        <div className="bg-blue-400 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Upload className="mx-auto text-blue-300" size={24} />
+                      <p className="text-sm font-bold">Add More Files</p>
+                      <p className="text-[10px] text-blue-300 uppercase tracking-widest font-black">PDF, Images, Docs</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

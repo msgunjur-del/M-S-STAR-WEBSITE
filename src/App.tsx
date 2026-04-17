@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import ReactGA from 'react-ga4';
 import { useCart } from './context/CartContext';
 import { 
   ShieldCheck, ShieldAlert, ShoppingBasket, Search, 
@@ -52,6 +53,20 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
   const { cart, setIsCartOpen } = useCart();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [adminEmail, setAdminEmail] = React.useState('shankarboss3@gmail.com');
+  const location = useLocation();
+
+  React.useEffect(() => {
+    const gaId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+    if (gaId) {
+      ReactGA.initialize(gaId);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (import.meta.env.VITE_GA_MEASUREMENT_ID) {
+      ReactGA.send({ hitType: "pageview", page: location.pathname + location.search });
+    }
+  }, [location]);
 
   React.useEffect(() => {
     const fetchSettings = async () => {

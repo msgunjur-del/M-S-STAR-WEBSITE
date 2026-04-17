@@ -61,6 +61,11 @@ export default function ProductCard({ id, title, description, price, category, i
                 {category}
               </span>
             </div>
+            <div className="absolute top-4 right-4">
+              <span className="bg-accent-blue text-white px-3 py-1.5 rounded-xl font-black text-xs shadow-lg shadow-blue-200">
+                ₹{price}
+              </span>
+            </div>
           </div>
           
           <div className="space-y-3 flex-grow">

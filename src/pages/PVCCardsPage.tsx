@@ -48,6 +48,16 @@ export default function PVCCardsPage() {
               PVC SMART <br />
               <span className="text-accent-amber">CARDS.</span>
             </h1>
+            <div className="flex items-center gap-4 pt-2">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Premium quality</span>
+                <span className="text-3xl font-black text-white tracking-tighter">Starting @ ₹99</span>
+              </div>
+              <div className="h-10 w-px bg-white/10 mx-2" />
+              <div className="bg-accent-amber text-ink px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-amber-900/20">
+                Express Print
+              </div>
+            </div>
             <p className="text-lg text-slate-400 font-medium leading-relaxed max-w-md">
               High-definition printing on premium PVC material. Perfect for Aadhar, PAN, Voter ID, and Custom IDs.
             </p>

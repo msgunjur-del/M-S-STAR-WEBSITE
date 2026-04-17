@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBasket, Clock, Package, Truck, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import { Search, ShoppingBasket, Clock, Package, Truck, CheckCircle2, AlertCircle, ExternalLink, Phone, Calendar } from 'lucide-react';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -127,6 +127,34 @@ export default function TrackOrderPage() {
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Items</p>
                 <p className="text-slate-900 font-black">{orderData.items?.length || 0} Products</p>
               </div>
+            </div>
+
+            {/* Detailed Tracking Details */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {orderData.estimatedDeliveryDate && (
+                <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                    <Calendar size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Estimated Delivery</p>
+                    <p className="text-lg font-black text-blue-900 tracking-tight">{orderData.estimatedDeliveryDate}</p>
+                  </div>
+                </div>
+              )}
+              {orderData.courierPhone && (
+                <div className="p-6 bg-green-50 rounded-3xl border border-green-100 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-green-100">
+                    <Phone size={24} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-green-400 uppercase tracking-widest leading-none mb-1">Courier Contact</p>
+                    <a href={`tel:${orderData.courierPhone}`} className="text-lg font-black text-green-900 hover:text-blue-600 transition-colors tracking-tight">
+                      {orderData.courierPhone}
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
 
             {orderData.trackingNumber && (
