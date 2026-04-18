@@ -543,14 +543,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* Kiosk CTA Section */}
       <section className="max-w-7xl mx-auto px-6">
         <div className="bg-ink rounded-[3rem] p-12 lg:p-20 relative overflow-hidden">
           <div className="relative z-10 grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8">
               <h2 className="text-5xl lg:text-5xl font-black font-headline text-white leading-[0.9] tracking-tighter">
                 VISIT OUR <br />
-                <span className="text-accent-blue">SMART PRINT KIOSK.</span>
+                <span className="text-accent-blue uppercase italic">SMART PRINT KIOSK.</span>
               </h2>
               <p className="text-slate-400 text-lg font-medium max-w-md">
                 Try the M S STAR Smart Print Kiosk for quick document uploads and instant processing. Perfect for high-volume tasks.
@@ -559,7 +559,7 @@ export default function HomePage() {
                 <Link to="/kiosk" className="bg-accent-blue text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/20 flex items-center gap-2">
                   Launch Terminal <ArrowRight size={20} />
                 </Link>
-                <a href="https://msstar.in/kiosk" target="_blank" rel="noopener noreferrer" className="bg-white/10 text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-white/20 transition-all border border-white/10 backdrop-blur-md flex items-center gap-2">
+                <a href="https://ais-dev-jcusho2nkmrm6xb3mltosk-591801513327.asia-east1.run.app" target="_blank" rel="noopener noreferrer" className="bg-white/10 text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-white/20 transition-all border border-white/10 backdrop-blur-md flex items-center gap-2">
                   Open Fullscreen <Monitor size={20} />
                 </a>
               </div>
