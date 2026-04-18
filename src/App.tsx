@@ -92,19 +92,24 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const isKiosk = location.pathname.startsWith('/kiosk');
+
   return (
-    <div className="min-h-screen bg-paper font-body text-ink antialiased flex flex-col transition-colors duration-300">
-      <ThemeToggle />
-      <SlideOutCart />
-      <ScrollToTopButton />
+    <div className={`min-h-screen bg-paper font-body text-ink antialiased flex flex-col transition-colors duration-300 ${isKiosk ? 'p-0' : ''}`}>
+      {!isKiosk && <ThemeToggle />}
+      {!isKiosk && <SlideOutCart />}
+      {!isKiosk && <ScrollToTopButton />}
       {/* TopNavBar */}
-      <div className="bg-red-600 text-white text-center py-1.5 text-[10px] font-black uppercase tracking-[0.2em] z-[60] fixed top-0 w-full shadow-sm">
-        <Link to="/disclaimer" className="animate-blink hover:underline flex items-center justify-center gap-2">
-          <ShieldAlert size={10} />
-          Important: Read our disclaimer before proceeding
-        </Link>
-      </div>
-      <nav className={`fixed left-0 right-0 z-50 px-4 md:px-8 transition-all duration-300 ${isScrolled ? 'top-0 py-2' : 'top-7 py-0'}`}>
+      {!isKiosk && (
+        <div className="bg-red-600 text-white text-center py-1.5 text-[10px] font-black uppercase tracking-[0.2em] z-[60] fixed top-0 w-full shadow-sm">
+          <Link to="/disclaimer" className="animate-blink hover:underline flex items-center justify-center gap-2">
+            <ShieldAlert size={10} />
+            Important: Read our disclaimer before proceeding
+          </Link>
+        </div>
+      )}
+      {!isKiosk && (
+        <nav className={`fixed left-0 right-0 z-50 px-4 md:px-8 transition-all duration-300 ${isScrolled ? 'top-0 py-2' : 'top-7 py-0'}`}>
         <div className={`max-w-7xl mx-auto bg-card border border-slate-300 rounded-3xl shadow-xl flex justify-between items-center px-6 transition-all duration-300 dark:bg-slate-900 dark:border-slate-800 ${isScrolled ? 'py-2.5' : 'py-3'}`}>
           <Link to="/" className="text-2xl font-black text-ink font-headline tracking-tighter flex items-center gap-2 dark:text-white">
             <div className="w-8 h-8 bg-accent-blue rounded-xl flex items-center justify-center text-white rotate-12">
@@ -119,7 +124,6 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             <Link to="/document-printing" className="hover:text-accent-blue transition-colors dark:hover:text-white">Printing</Link>
             <Link to="/pvc-cards" className="hover:text-accent-blue transition-colors dark:hover:text-white">PVC Cards</Link>
             <Link to="/photos" className="hover:text-accent-blue transition-colors dark:hover:text-white">Photos</Link>
-            <Link to="/kiosk" className="hover:text-accent-blue transition-colors dark:hover:text-white flex items-center gap-1.5"><Monitor size={14} className="text-accent-blue"/> Kiosk</Link>
             
             {/* Search Bar */}
             <div className="relative group">
@@ -145,8 +149,8 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
 
             <div className="hidden lg:flex items-center gap-4">
               {user?.email === adminEmail && (
-                <Link to="/admin" className="flex items-center gap-1.5 text-slate-500 hover:text-ink font-bold text-sm dark:text-slate-300 dark:hover:text-white">
-                  <Settings size={16} />
+                <Link to="/admin" className="flex items-center gap-1.5 bg-red-500/10 text-red-600 border border-red-200 px-3 py-1 rounded-full hover:bg-red-500/20 transition-all font-black text-[10px] tracking-widest uppercase">
+                  <Lock size={12} />
                   Admin
                 </Link>
               )}
@@ -180,12 +184,11 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
             <Link to="/document-printing" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Printing</Link>
             <Link to="/pvc-cards" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>PVC Cards</Link>
             <Link to="/photos" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Photos</Link>
-            <Link to="/kiosk" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Kiosk</Link>
             <Link to="/track-order" className="block hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>Track Order</Link>
             <hr className="border-slate-200 dark:border-slate-800" />
             {user?.email === adminEmail && (
-              <Link to="/admin" className="flex items-center gap-2 hover:text-ink dark:hover:text-white" onClick={() => setIsMenuOpen(false)}>
-                <Settings size={18} />
+              <Link to="/admin" className="flex items-center justify-center gap-1.5 bg-red-500/10 text-red-600 border border-red-200 px-4 py-2 rounded-full hover:bg-red-500/20 transition-all font-black text-[10px] tracking-widest uppercase mb-4" onClick={() => setIsMenuOpen(false)}>
+                <Lock size={12} />
                 Admin Panel
               </Link>
             )}
@@ -206,12 +209,14 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
           </div>
         )}
       </nav>
+      )}
 
-      <main className="pt-32 flex-grow">
+      <main className={`flex-grow ${isKiosk ? 'pt-0' : 'pt-32'}`}>
         {children}
       </main>
 
-      <footer className="bg-[#2563EB] text-white py-20 mt-20 border-t border-blue-400 dark:bg-[#1E40AF]">
+      {!isKiosk && (
+        <footer className="bg-[#2563EB] text-white py-20 mt-20 border-t border-blue-400 dark:bg-[#1E40AF]">
         <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-12">
           <div className="space-y-6">
             <div className="flex items-center gap-2 text-2xl font-black font-headline tracking-tighter">
@@ -225,9 +230,6 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
               Quality you can feel, speed you can trust. Located in Gunjur, Bangalore.
             </p>
             <div className="flex gap-4">
-              <Link to="/kiosk" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors" title="MS STAR Kiosk App">
-                <Monitor size={18} />
-              </Link>
               <a href="https://wa.me/919901526231" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white hover:text-blue-600 transition-colors">
                 <MessageCircle size={18} />
               </a>
@@ -247,6 +249,7 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
               <li><Link to="/contact-us" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Contact Us</Link></li>
               <li><Link to="/faq" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> FAQ</Link></li>
               <li><Link to="/track-order" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Track Order</Link></li>
+              <li><Link to="/kiosk" className="hover:text-blue-200 transition-colors flex items-center gap-2"><ChevronRight size={14}/> Kiosk Mode</Link></li>
             </ul>
           </div>
 
@@ -292,20 +295,22 @@ function Layout({ children, user }: { children: React.ReactNode, user: any }) {
           </div>
         </div>
       </footer>
+      )}
       
-      {/* Floating WhatsApp Button */}
-      <a 
-        href="https://wa.me/919901526231" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="fixed bottom-8 right-8 z-[100] bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
-        aria-label="Chat on WhatsApp"
-      >
-        <MessageCircle size={28} />
-        <span className="absolute right-full mr-4 bg-white text-ink px-4 py-2 rounded-xl text-xs font-black shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-100">
-          Need Help? Chat with us!
-        </span>
-      </a>
+      {!isKiosk && (
+        <a 
+          href="https://wa.me/919901526231" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="fixed bottom-8 right-8 z-[100] bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center group"
+          aria-label="Chat on WhatsApp"
+        >
+          <MessageCircle size={28} />
+          <span className="absolute right-full mr-4 bg-white text-ink px-4 py-2 rounded-xl text-xs font-black shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-slate-100">
+            Need Help? Chat with us!
+          </span>
+        </a>
+      )}
     </div>
   );
 }

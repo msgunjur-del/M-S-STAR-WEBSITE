@@ -1,0 +1,22 @@
+{
+  "short_name": "MS STAR",
+  "name": "M S STAR XEROX & Kiosk",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/print/192/192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/seed/print/512/512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/kiosk",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#2563eb",
+  "description": "Premium Printing Services and Smart Kiosk Terminal"
+}

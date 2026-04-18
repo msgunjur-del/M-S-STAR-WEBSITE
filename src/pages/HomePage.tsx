@@ -559,7 +559,7 @@ export default function HomePage() {
                 <Link to="/kiosk" className="bg-accent-blue text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-blue-600 transition-all shadow-xl shadow-blue-900/20 flex items-center gap-2">
                   Launch Terminal <ArrowRight size={20} />
                 </Link>
-                <a href="https://ais-dev-jcusho2nkmrm6xb3mltosk-591801513327.asia-east1.run.app" target="_blank" rel="noopener noreferrer" className="bg-white/10 text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-white/20 transition-all border border-white/10 backdrop-blur-md flex items-center gap-2">
+                <a href="https://ais-dev-jcusho2nkmrm6xb3mltosk-591801513327.asia-east1.run.app/Kiosk/" target="_blank" rel="noopener noreferrer" className="bg-white/10 text-white px-10 py-5 rounded-2xl font-black text-lg hover:bg-white/20 transition-all border border-white/10 backdrop-blur-md flex items-center gap-2">
                   Open Fullscreen <Monitor size={20} />
                 </a>
               </div>
